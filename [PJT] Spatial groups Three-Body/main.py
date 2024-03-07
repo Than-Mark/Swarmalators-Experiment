@@ -307,7 +307,8 @@ class Swarmalators2D(Swarmalators):
 ##################################################################################
 
 class ThreeBody(Swarmalators2D):
-    def __init__(self, strengthLambda: float, distanceD0: float, boundaryLength: float = 10, 
+    def __init__(self, strengthLambda1: float, strengthLambda2: float, 
+                 distanceD1: float, distanceD2: float, boundaryLength: float = 10, 
                  omegaTheta2Shift: float = 0, agentsNum: int=1000, dt: float=0.01, 
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 5, 
                  uniform: bool = True, randomSeed: int = 10, overWrite: bool = False) -> None:
@@ -320,7 +321,8 @@ class ThreeBody(Swarmalators2D):
         self.agentsNum = agentsNum
         self.dt = dt
         self.speedV = 0.03
-        self.distanceD0 = distanceD0
+        self.distanceD1 = distanceD1
+        self.distanceD2 = distanceD2
         if uniform:
             self.omegaTheta = np.concatenate([
                 np.random.uniform(1, 3, size=agentsNum // 2),
@@ -332,10 +334,13 @@ class ThreeBody(Swarmalators2D):
                 np.random.normal(loc=-3, scale=0.5, size=agentsNum // 2)
             ])
         self.uniform = uniform
-        self.strengthLambda = strengthLambda
+        self.strengthLambda1 = strengthLambda1
+        self.strengthLambda2 = strengthLambda2
         self.tqdm = tqdm
         self.savePath = savePath
         self.temp = np.zeros(agentsNum)
+        self.tempForK = np.zeros((agentsNum, agentsNum))
+        self.eyeMask = ~np.eye(agentsNum, dtype=bool)
         self.shotsnaps = shotsnaps
         self.counts = 0
         self.omegaTheta[:self.agentsNum // 2] += omegaTheta2Shift
@@ -346,13 +351,20 @@ class ThreeBody(Swarmalators2D):
         self.overWrite = overWrite
 
     @property
-    def G(self):
-        matK = self.K
-        return matK[:, :, np.newaxis] * matK[:, np.newaxis, :]
+    def K(self):
+        return (self.distance_x(self.deltaX) <= self.distanceD1) * self.eyeMask
 
     @property
-    def K(self):
-        return self.distance_x(self.deltaX) <= self.distanceD0
+    def K1(self):
+        return self.tempForK[:, np.newaxis, :]
+    
+    @property
+    def K2(self):
+        return (
+            self.tempForK[:, :, np.newaxis] * 
+            self.tempForK[:, np.newaxis, :] * 
+            self.tempForK[np.newaxis, :, :]
+        )
 
     @property
     def deltaX(self) -> np.ndarray:
@@ -375,17 +387,22 @@ class ThreeBody(Swarmalators2D):
         return self._pointTheta(self.phaseTheta[:, np.newaxis, np.newaxis], 
                                 self.phaseTheta[np.newaxis, np.newaxis, :], 
                                 self.phaseTheta[np.newaxis, :, np.newaxis],
-                                self.omegaTheta, self.strengthLambda, self.dt, self.G)
+                                self.omegaTheta, 
+                                self.strengthLambda1, self.strengthLambda2, 
+                                self.K1, self.K2, 
+                                self.dt)
 
     @staticmethod
     # @nb.njit
     def _pointTheta(phaseTheta: np.ndarray, other1: np.ndarray, other2: np.ndarray, 
-                    omegaTheta: np.ndarray, strengthLambda: float, 
-                    h: float, G: np.ndarray):
-        k1 = omegaTheta + strengthLambda * np.sum(G * np.sin(
-            other1 + other2 - 2 * phaseTheta
-        ), axis=(1, 2))
-        return k1 * h
+                    omegaTheta: np.ndarray, strengthLambda1: float, strengthLambda2: float,
+                    K1: np.ndarray, K2: np.ndarray, dt: float) -> np.ndarray:
+        k1 = (
+            omegaTheta 
+            + strengthLambda1 * np.sum(K1 * np.sin(other1 - phaseTheta), axis=(1, 2))
+            + strengthLambda2 * np.sum(K2 * np.sin(other1 + other2 - 2 * phaseTheta), axis=(1, 2))
+        )
+        return k1 * dt
 
     def append(self):
         if self.store is not None:
@@ -399,6 +416,7 @@ class ThreeBody(Swarmalators2D):
         self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta)
         self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta)
         self.positionX = np.mod(self.positionX, self.boundaryLength)
+        self.tempForK = self.K
         self.temp = self.pointTheta
         self.phaseTheta += self.temp
         self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
