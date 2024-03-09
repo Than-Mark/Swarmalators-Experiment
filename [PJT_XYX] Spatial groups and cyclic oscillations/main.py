@@ -1065,7 +1065,7 @@ def plot_tvcp(models: List[SpatialGroups], savePath: str = None):
         cp1, colors = sa.tv_center_position(step=30)
         sa.plot_centers(ax=ax2, index=-1)
         ax2.set_title(rf"$\lambda={model.strengthLambda},\ d_0={model.distanceD0}$")
-        cp1[:, 0] = cp1[:, 0] * model.dt
+        cp1[:, 0] = cp1[:, 0]
 
         ax1Row1.scatter(cp1[:, 0], cp1[:, 1], s=0.5, alpha=0.01, c=colors)
         ax1Row1.set_ylim(0, 10)
