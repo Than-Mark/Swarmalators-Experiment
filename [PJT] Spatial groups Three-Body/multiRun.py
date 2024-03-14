@@ -10,18 +10,18 @@ if __name__ == "__main__":
 
 
     rangeLambdas = np.concatenate([
-        np.arange(0.01, 0.1, 0.01), np.arange(0.1, 1, 0.1)
+        np.arange(0.01, 0.1, 0.02), np.arange(0.1, 1, 0.2)
     ])
     distanceDs = np.concatenate([
-        np.arange(0.1, 1, 0.1), np.arange(1, 2.1, 1)
+        np.arange(0.1, 1, 0.2)
     ])
 
     savePath = "./data"
 
     models = [
-        ThreeBody(l, d0, agentsNum=200, boundaryLength=5,
+        ThreeBody(l1, l2, d1, d2, agentsNum=200, boundaryLength=5,
                 tqdm=True, savePath=savePath, overWrite=True)
-        for l, d0 in product(rangeLambdas, distanceDs)
+        for l1, l2, d1, d2  in product(rangeLambdas, rangeLambdas, distanceDs, distanceDs)
     ]
 
     with Pool(4) as p:

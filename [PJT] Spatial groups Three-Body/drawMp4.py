@@ -38,8 +38,8 @@ def draw_mp4(model):
             np.cos(phaseTheta[class2]), np.sin(phaseTheta[class2]), color='dodgerblue'
         )
         limShift = 0
-        ax1.set_xlim(0 - limShift, 5 + limShift)
-        ax1.set_ylim(0 - limShift, 5 + limShift)
+        ax1.set_xlim(0 - limShift, model.boundaryLength + limShift)
+        ax1.set_ylim(0 - limShift, model.boundaryLength + limShift)
 
         ax2 = plt.subplot(1, 2, 2, projection='3d')
         hist, bins = np.histogram(phaseTheta[class1], bins=100, range=(-np.pi, np.pi))
@@ -64,7 +64,6 @@ def draw_mp4(model):
     fig, ax = plt.subplots(figsize=(11, 5))
     ani = ma.FuncAnimation(fig, plot_frame, frames=np.arange(0, TNum, 1), interval=50, repeat=False)
     ani.save(f"{mp4Path}/{model}.mp4")
-    plt.show()
     plt.close()
 
     pbar.close()
@@ -76,17 +75,17 @@ if __name__ == "__main__":
     from multiprocessing import Pool
 
     rangeLambdas = np.concatenate([
-        np.arange(0.01, 0.1, 0.01), np.arange(0.1, 1, 0.1)
+        np.arange(0.01, 0.1, 0.02), np.arange(0.1, 1, 0.2)
     ])
     distanceDs = np.concatenate([
-        np.arange(0.1, 1, 0.1), np.arange(1, 2.1, 1)
+        np.arange(0.1, 1, 0.2)
     ])
 
     models = [
-            ThreeBody(l, d0, agentsNum=200, boundaryLength=5,
-                    tqdm=True, savePath=savePath, overWrite=True)
-            for l, d0 in product(rangeLambdas, distanceDs)
-        ]
+        ThreeBody(l1, l2, d1, d2, agentsNum=200, boundaryLength=5,
+                tqdm=True, savePath=savePath, overWrite=True)
+        for l1, l2, d1, d2  in product(rangeLambdas, rangeLambdas, distanceDs, distanceDs)
+    ]
 
     with Pool(4) as p:
         p.map(draw_mp4, models)

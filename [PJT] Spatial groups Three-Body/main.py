@@ -424,9 +424,15 @@ class ThreeBody(Swarmalators2D):
     def __str__(self) -> str:
         
         if self.uniform:
-            name =  f"ThreeBody_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
+            name =  (
+                f"ThreeBody_uniform_{self.strengthLambda1:.3f}_{self.strengthLambda2:.3f}"
+                f"_{self.distanceD1:.2f}_{self.distanceD2:.2f}_{self.randomSeed}"
+            )
         else:
-            name =  f"ThreeBody_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
+            name =  (
+                f"ThreeBody_normal_{self.strengthLambda1:.3f}_{self.strengthLambda2:.3f}"
+                f"_{self.distanceD1:.2f}_{self.distanceD2:.2f}_{self.randomSeed}"
+            )
 
         if self.omegaTheta2Shift != 0:
             name += f"_shift_{self.omegaTheta2Shift:.2f}"
