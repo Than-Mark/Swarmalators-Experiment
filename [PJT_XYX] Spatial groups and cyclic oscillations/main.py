@@ -91,8 +91,9 @@ class SpatialGroups(Swarmalators2D):
         self.randomSeed = randomSeed
         self.overWrite = overWrite
 
-    def plot(self):
-        fig, ax = plt.subplots(figsize=(5, 5))
+    def plot(self, ax: plt.Axes = None):
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(5, 5))
         plt.quiver(
             self.positionX[:self.agentsNum // 2, 0], self.positionX[:self.agentsNum // 2, 1],
             np.cos(self.phaseTheta[:self.agentsNum // 2]), np.sin(self.phaseTheta[:self.agentsNum // 2]), color='tomato'
