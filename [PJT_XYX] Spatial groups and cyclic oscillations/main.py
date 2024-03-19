@@ -493,12 +493,12 @@ class StateAnalysis:
         if ax is None:
             fig, ax = plt.subplots(figsize=(6, 6))
 
-        quiverColors = ["red"] * 500 + ["blue"] * 500
+        quiverColors = ["#FF4B4E"] * 500 + ["#414CC7"] * 500
         ax.quiver(
             positionX[:, 0], positionX[:, 1],
             np.cos(phaseTheta[:]), np.sin(phaseTheta[:]), color=quiverColors, alpha=0.8
         )
-        centerColors = ["orange"] * 500 + ["dodgerblue"] * 500
+        centerColors = ["#FBDD85"] * 500 + ["#80A6E2"] * 500
         centers = self.centers
         ax.scatter(centers[:, 0], centers[:, 1], color=centerColors, s=5)
         ax.set_xlim(0, 10)
@@ -511,7 +511,7 @@ class StateAnalysis:
         ax.spines['left'].set_color('black')
         ax.spines['right'].set_color('black')
         ax.set_xlabel(r"$x$", fontsize=16)
-        ax.set_ylabel(r"$y$", fontsize=16)
+        ax.set_ylabel(r"$y$", fontsize=16, rotation=0)
     
     def center_radius_op(self, classOsci: np.ndarray):
         centers = self.centers
