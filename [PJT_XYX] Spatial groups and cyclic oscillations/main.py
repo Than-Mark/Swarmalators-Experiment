@@ -443,7 +443,7 @@ class StateAnalysis:
     @nb.njit
     def _calc_classes(centers, classDistance, totalDistances):
         classes = [[0]]
-        classNum = 0
+        classNum = 1
         nonClassifiedOsci = np.arange(1, centers.shape[0])
 
         for i in nonClassifiedOsci:
@@ -463,7 +463,25 @@ class StateAnalysis:
                 classNum += 1
                 classes.append([i])
 
-        return classes
+        newClasses = [classes[0]]
+
+        for subClass in classes[1:]:
+            newClass = True
+            for newClassI in range(len(newClasses)):
+                distance = classDistance
+                for i in newClasses[newClassI]:
+                    for j in subClass:
+                        if totalDistances[i, j] < distance:
+                            distance = totalDistances[i, j]
+                if distance < classDistance:
+                    newClasses[newClassI] += subClass
+                    newClass = False
+                    break
+
+            if newClass:
+                newClasses.append(subClass)
+    
+        return newClasses
 
     def get_classes_centers(self):
         centers = self.centers
