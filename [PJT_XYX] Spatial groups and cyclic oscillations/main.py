@@ -203,13 +203,28 @@ class NoAdjust(SpatialGroups):
 
 
 class CorrectCouplingAfter(SpatialGroups):
-    def __init__(self, strengthLambda: float, distanceD0: float, boundaryLength: float = 10,
-                 omegaTheta2Shift: float = 0, agentsNum: int=1000, dt: float=0.01, 
-                 tqdm: bool = False, savePath: str = None, shotsnaps: int = 5, 
+    def __init__(self, strengthLambda: float, distanceD0: float, 
+                 enhancedLambdas: np.ndarray = None, enhancedDistanceD0: np.ndarray = None,
+                 boundaryLength: float = 10, omegaTheta2Shift: float = 0, agentsNum: int=1000, 
+                 dt: float=0.01, tqdm: bool = False, savePath: str = None, shotsnaps: int = 5, 
                  uniform: bool = True, randomSeed: int = 10, overWrite: bool = False) -> None:
         super().__init__(strengthLambda, distanceD0, boundaryLength, omegaTheta2Shift, 
                          agentsNum, dt, tqdm, savePath, shotsnaps, uniform, randomSeed, overWrite)
 
+        if (enhancedLambdas is not None) & (enhancedDistanceD0 is not None):
+            raise ValueError("Adiabatic tuning can only be one-dimensional")
+        if enhancedLambdas is None:
+            enhancedLambdas = np.ones_like(enhancedDistanceD0) * self.strengthLambda
+            self.diraction = "DistanceD0"
+        elif enhancedDistanceD0 is None:
+            enhancedDistanceD0 = np.ones_like(enhancedLambdas) * self.distanceD0
+            self.diraction = "StrengthLambda"
+        else:
+            raise ValueError("enhancedLambdas and enhancedDistanceD0 cannot be None at the same time")
+
+        self.enhancedLambdas = enhancedLambdas
+        self.enhancedDistanceD0 = enhancedDistanceD0
+        self.oldName = self.get_old_name()
         targetPath = f"./data/{self.oldName}.h5"
         totalPositionX = pd.read_hdf(targetPath, key="positionX")
         totalPhaseTheta = pd.read_hdf(targetPath, key="phaseTheta")
@@ -221,8 +236,7 @@ class CorrectCouplingAfter(SpatialGroups):
         self.positionX = totalPositionX[-1]
         self.phaseTheta = totalPhaseTheta[-1]
 
-    @property
-    def oldName(self) -> str:
+    def get_old_name(self) -> str:
         
         if self.uniform:
             name =  f"CorrectCoupling_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
@@ -236,26 +250,22 @@ class CorrectCouplingAfter(SpatialGroups):
 
     def __str__(self) -> str:
             
-            if self.uniform:
-                name =  f"CorrectCouplingAfter_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
-            else:
-                name =  f"CorrectCouplingAfter_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
+        return self.oldName.replace("CorrectCoupling", f"CorrectCouplingAfter{self.diraction}")
     
-            return name
-    
-    def run(self, enhancedLambdas: np.ndarray):
+    def run(self):
 
         if not self.init_store():
             return
-        
-        TNum = enhancedLambdas.shape[0]
+
+        TNum = self.enhancedLambdas.shape[0]
         if self.tqdm:
             iterRange = tqdm(range(TNum))
         else:
             iterRange = range(TNum)
 
         for idx in iterRange:
-            self.strengthLambda = enhancedLambdas[idx]
+            self.strengthLambda = self.enhancedLambdas[idx]
+            self.distanceD0 = self.enhancedDistanceD0[idx]
             self.update()
             self.append()
             self.counts = idx
@@ -319,11 +329,11 @@ class SingleDistribution(SpatialGroups):
 
 
 class StateAnalysis:
-    def __init__(self, model: SpatialGroups, classDistance: float = 2, lookIndex: int = -1, tqdm: bool = True):
+    def __init__(self, model: SpatialGroups, classDistance: float = 2, lookIndex: int = -1, showTqdm: bool = False):
         self.model = model
         self.classDistance = classDistance
         self.lookIndex = lookIndex
-        self.tqdm = tqdm
+        self.showTqdm = showTqdm
         
         targetPath = f"{self.model.savePath}/{self.model}.h5"
         totalPositionX = pd.read_hdf(targetPath, key="positionX")
@@ -331,7 +341,7 @@ class StateAnalysis:
         totalPointTheta = pd.read_hdf(targetPath, key="pointTheta")
         
         TNum = totalPositionX.shape[0] // self.model.agentsNum
-
+        self.TNum = TNum
         self.totalPositionX = totalPositionX.values.reshape(TNum, self.model.agentsNum, 2)
         self.totalPhaseTheta = totalPhaseTheta.values.reshape(TNum, self.model.agentsNum)
         self.totalPointTheta = totalPointTheta.values.reshape(TNum, self.model.agentsNum)
@@ -339,7 +349,7 @@ class StateAnalysis:
         self.centersValue = None
         self.classesValue = None
 
-        if self.tqdm:
+        if self.showTqdm:
             self.iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
         else:
             self.iterObject = range(1, self.totalPhaseTheta.shape[0])
@@ -538,7 +548,7 @@ class StateAnalysis:
     def tv_center_radius_op(self, step: int = 10):
         centerRadios = []
 
-        if self.tqdm:
+        if self.showTqdm:
             iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
         else:
             iterObject = range(1, self.totalPhaseTheta.shape[0])
@@ -563,7 +573,7 @@ class StateAnalysis:
         positionY = []
         colors = []
 
-        if self.tqdm:
+        if self.showTqdm:
             iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
         else:
             iterObject = range(1, self.totalPhaseTheta.shape[0])
@@ -594,7 +604,7 @@ class StateAnalysis:
         centerRadios = []
         colors = []
 
-        if self.tqdm:
+        if self.showTqdm:
             iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
         else:
             iterObject = range(1, self.totalPhaseTheta.shape[0])
@@ -844,7 +854,7 @@ class StateAnalysis:
         centerAggs = []
         colors = []
 
-        if self.tqdm:
+        if self.showTqdm:
             iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
         else:
             iterObject = range(1, self.totalPhaseTheta.shape[0])
@@ -875,7 +885,7 @@ class StateAnalysis:
         t = []
         r = []
 
-        if self.tqdm:
+        if self.showTqdm:
             iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
         else:
             iterObject = range(1, self.totalPhaseTheta.shape[0])
@@ -1177,56 +1187,3 @@ def plot_tvcr(models: List[SpatialGroups], savePath: str = None):
     if savePath is not None:
         plt.savefig(savePath, dpi=100, bbox_inches="tight")
     plt.close()
-
-
-# def plot_tvccr(models: List[SpatialGroups], savePath: str = None):
-#     _ = plt.figure(figsize=(3 * 5, len(models) * 5))
-
-#     idx = 0
-
-#     for model in tqdm(models):
-#         ax1 = plt.subplot2grid((len(models), 3), (idx, 0), colspan=2)
-#         ax2 = plt.subplot2grid((len(models), 3), (idx, 2))
-
-#         sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
-#         tvccr = sa.tv_class_center_radius(35)
-#         ax1.plot(tvccr[:, 0], tvccr[:, 1])
-#         ax1.set_title(f"{model}, t: 0-12000, Class mean center distance")
-
-#         sa.plot_centers(ax=ax2, index=-1)
-#         ax2.set_title(f"snapshot at 12000")
-
-#         idx += 1
-
-#     plt.tight_layout()
-#     if savePath is not None:
-#         plt.savefig(savePath, dpi=100, bbox_inches="tight")
-#     plt.close()
-
-# def plot_tvccp(models: List[SpatialGroups], savePath: str = None):
-#     _ = plt.figure(figsize=(3 * 5, len(models) * 5))
-
-#     idx = 0
-
-#     for model in tqdm(models):
-#         ax1Row1 = plt.subplot2grid((len(models) * 2, 3), (idx, 0), colspan=2)
-#         ax1Row2 = plt.subplot2grid((len(models) * 2, 3), (idx + 1, 0), colspan=2)
-#         ax2 = plt.subplot2grid((len(models) * 2, 3), (idx, 2), rowspan=2)
-
-#         sa = StateAnalysis(model, classDistance=1, lookIndex=-1, tqdm=False)
-#         cp1 = sa.tv_class_center_position(step=30)
-#         sa.plot_centers(ax=ax2, index=-1)
-
-#         ax1Row1.scatter(cp1[:, 0], cp1[:, 1], s=0.5, alpha=0.01)
-#         ax1Row1.set_ylim(0, 10)
-#         ax1Row1.set_title(f"{model}, t: 0-12000, Class center PositionX")
-#         ax1Row2.scatter(cp1[:, 0], cp1[:, 2], s=0.5, alpha=0.01)
-#         ax1Row2.set_ylim(0, 10)
-#         ax1Row2.set_title(f"PositionY")
-
-#         idx += 2
-
-#     plt.tight_layout()
-#     if savePath is not None:
-#         plt.savefig(savePath, dpi=100, bbox_inches="tight")
-#     plt.close()
