@@ -273,6 +273,40 @@ class CorrectCouplingAfter(SpatialGroups):
         self.close()
 
 
+class TwoOsillators(SpatialGroups):
+    def __init__(self, strengthLambda: float, distanceD0: float, boundaryLength: float = 10, 
+                 omega1: float = 3, omega2: float = -3, dt: float=0.01, couplesNum: int=2,
+                 tqdm: bool = False, savePath: str = None, shotsnaps: int = 5, 
+                 uniform: bool = True, randomSeed: int = 10, overWrite: bool = False) -> None:
+        super().__init__(strengthLambda, distanceD0, boundaryLength, 0, 
+                         2, dt, tqdm, savePath, shotsnaps, uniform, randomSeed, overWrite)
+        assert couplesNum in [1, 2], "couplesNum must be 1 or 2"
+        self.omegaTheta = np.array([omega1, omega2])
+        radius = 3 / np.abs(self.omegaTheta)
+        spatialAngle = self.phaseTheta - np.sign(self.omegaTheta) * np.pi / 2
+        self.positionX[:, 0] = radius * np.cos(spatialAngle) + self.boundaryLength / 2
+        self.positionX[:, 1] = radius * np.sin(spatialAngle) + self.boundaryLength / 2
+        self.couplesNum = couplesNum
+
+    @property
+    def K(self):
+        rawK = self.distance_x(self.deltaX) <= self.distanceD0
+        if self.couplesNum == 2:
+            return rawK
+        else:
+            rawK[0] = False
+            return rawK
+
+    def __str__(self) -> str:
+        
+        if self.uniform:
+            name =  f"TwoOsillators_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
+        else:
+            name =  f"TwoOsillators_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
+
+        return name
+
+
 class SingleDistribution(SpatialGroups):
     def __init__(self, strengthLambda: float, distanceD0: float, boundaryLength: float = 5, 
                  agentsNum: int=500, dt: float=0.01, omegaShift: float = 0,
