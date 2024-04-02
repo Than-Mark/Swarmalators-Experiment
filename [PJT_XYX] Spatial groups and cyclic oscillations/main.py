@@ -286,7 +286,20 @@ class TwoOsillators(SpatialGroups):
         spatialAngle = self.phaseTheta - np.sign(self.omegaTheta) * np.pi / 2
         self.positionX[:, 0] = radius * np.cos(spatialAngle) + self.boundaryLength / 2
         self.positionX[:, 1] = radius * np.sin(spatialAngle) + self.boundaryLength / 2
+        if omega1 * omega2 > 0:
+            self.positionX[0] = self.positionX[0] - 3 / np.abs(omega1)
         self.couplesNum = couplesNum
+
+    def update(self):
+        self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta)
+        self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta)
+        self.temp = self.pointTheta
+        self.phaseTheta += self.temp
+        self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
+
+    @property
+    def deltaX(self) -> np.ndarray:
+        return self.positionX - self.positionX[:, np.newaxis]
 
     @property
     def K(self):
@@ -300,9 +313,9 @@ class TwoOsillators(SpatialGroups):
     def __str__(self) -> str:
         
         if self.uniform:
-            name =  f"TwoOsillators_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
+            name =  f"TwoOsillators_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}_{self.omegaTheta[0]:.2f}_{self.omegaTheta[1]:.2f}"
         else:
-            name =  f"TwoOsillators_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}"
+            name =  f"TwoOsillators_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}_{self.omegaTheta[0]:.2f}_{self.omegaTheta[1]:.2f}"
 
         return name
 
