@@ -62,7 +62,7 @@ class SpatialGroups(Swarmalators2D):
         self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi - np.pi
         self.agentsNum = agentsNum
         self.dt = dt
-        self.speedV = 0.03
+        self.speedV = 3
         self.distanceD0 = distanceD0
         if uniform:
             self.omegaTheta = np.concatenate([
@@ -148,8 +148,8 @@ class SpatialGroups(Swarmalators2D):
             self.store.append(key="pointTheta", value=pd.DataFrame(self.temp))
 
     def update(self):
-        self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta)
-        self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta)
+        self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta) * self.dt
+        self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta) * self.dt
         self.positionX = np.mod(self.positionX, self.boundaryLength)
         self.temp = self.pointTheta
         self.phaseTheta += self.temp
@@ -181,8 +181,8 @@ class NoAdjust(SpatialGroups):
                          agentsNum, dt, tqdm, savePath, shotsnaps, uniform, randomSeed, overWrite)
         
     def update(self):
-        self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta)
-        self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta)
+        self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta) * self.dt
+        self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta) * self.dt
         # self.positionX = np.mod(self.positionX, self.boundaryLength)
         self.temp = self.pointTheta
         self.phaseTheta += self.temp
@@ -291,8 +291,8 @@ class TwoOsillators(SpatialGroups):
         self.couplesNum = couplesNum
 
     def update(self):
-        self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta)
-        self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta)
+        self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta) * self.dt
+        self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta) * self.dt
         self.temp = self.pointTheta
         self.phaseTheta += self.temp
         self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
