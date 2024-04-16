@@ -235,13 +235,14 @@ class Swarmalators2D(Swarmalators):
         self.temp = {}
         self.overWrite = overWrite 
 
-    def plot(self) -> None:
-        plt.figure(figsize=(6, 5))
+    def plot(self, ax: plt.Axes = None) -> None:
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(6, 5))
 
-        plt.scatter(self.positionX[:, 0], self.positionX[:, 1],
+        sc = ax.scatter(self.positionX[:, 0], self.positionX[:, 1],
                     c=self.phaseTheta, cmap=new_cmap, alpha=0.8, vmin=0, vmax=2*np.pi)
 
-        cbar = plt.colorbar(ticks=[0, np.pi, 2*np.pi])
+        cbar = plt.colorbar(sc, ticks=[0, np.pi, 2*np.pi], ax=ax)
         cbar.ax.set_ylim(0, 2*np.pi)
         cbar.ax.set_yticklabels(['$0$', '$\pi$', '$2\pi$'])
 
