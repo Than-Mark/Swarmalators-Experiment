@@ -276,7 +276,7 @@ class CorrectCouplingAfter(SpatialGroups):
 class TwoOsillators(SpatialGroups):
     def __init__(self, strengthLambda: float, distanceD0: float, boundaryLength: float = 10, 
                  omega1: float = 3, omega2: float = -3, dt: float=0.01, couplesNum: int=2,
-                 tqdm: bool = False, savePath: str = None, shotsnaps: int = 5, 
+                 tqdm: bool = False, savePath: str = None, shotsnaps: int = 2, 
                  uniform: bool = True, randomSeed: int = 10, overWrite: bool = False) -> None:
         super().__init__(strengthLambda, distanceD0, boundaryLength, 0, 
                          2, dt, tqdm, savePath, shotsnaps, uniform, randomSeed, overWrite)
