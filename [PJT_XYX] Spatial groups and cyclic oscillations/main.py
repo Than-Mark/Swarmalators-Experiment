@@ -275,12 +275,14 @@ class CorrectCouplingAfter(SpatialGroups):
 
 class TwoOsillators(SpatialGroups):
     def __init__(self, strengthLambda: float, distanceD0: float, boundaryLength: float = 10, 
+                 typeA: str = "heaviside", 
                  omega1: float = 3, omega2: float = -3, dt: float=0.01, couplesNum: int=2,
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 2, 
                  uniform: bool = True, randomSeed: int = 10, overWrite: bool = False) -> None:
         super().__init__(strengthLambda, distanceD0, boundaryLength, 0, 
                          2, dt, tqdm, savePath, shotsnaps, uniform, randomSeed, overWrite)
-        assert couplesNum in [1, 2], "couplesNum must be 1 or 2"
+        assert couplesNum in [1, 2]
+        assert typeA in ["heaviside", "alpha"]
         self.omegaTheta = np.array([omega1, omega2])
         radius = 3 / np.abs(self.omegaTheta)
         spatialAngle = self.phaseTheta - np.sign(self.omegaTheta) * np.pi / 2
@@ -289,6 +291,7 @@ class TwoOsillators(SpatialGroups):
         if omega1 * omega2 > 0:
             self.positionX[0] = self.positionX[0] - 3 / np.abs(omega1)
         self.couplesNum = couplesNum
+        self.typeA = typeA
 
     def update(self):
         self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta) * self.dt
@@ -302,13 +305,20 @@ class TwoOsillators(SpatialGroups):
         return self.positionX - self.positionX[:, np.newaxis]
 
     @property
+    def rawA(self):
+        if self.typeA == "heaviside":        
+            return self.distance_x(self.deltaX) <= self.distanceD0
+        elif self.typeA == "alpha":
+            return (1 + self.distance_x(self.deltaX) / self.distanceD0) ** (-1 / self.distanceD0)
+
+    @property
     def K(self):
-        rawK = self.distance_x(self.deltaX) <= self.distanceD0
+        rawA = self.rawA
         if self.couplesNum == 2:
-            return rawK
+            return rawA
         else:
-            rawK[0] = False
-            return rawK
+            rawA[0] = False
+            return rawA
 
     def __str__(self) -> str:
         
@@ -316,6 +326,9 @@ class TwoOsillators(SpatialGroups):
             name =  f"TwoOsillators_uniform_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}_{self.omegaTheta[0]:.2f}_{self.omegaTheta[1]:.2f}"
         else:
             name =  f"TwoOsillators_normal_{self.strengthLambda:.3f}_{self.distanceD0:.2f}_{self.randomSeed}_{self.omegaTheta[0]:.2f}_{self.omegaTheta[1]:.2f}"
+
+        if self.typeA != "heaviside":
+            name += f"_{self.typeA}"
 
         return name
 
