@@ -289,7 +289,10 @@ class TwoOsillators(SpatialGroups):
         self.positionX[:, 0] = radius * np.cos(spatialAngle) + self.boundaryLength / 2
         self.positionX[:, 1] = radius * np.sin(spatialAngle) + self.boundaryLength / 2
         if omega1 * omega2 > 0:
-            self.positionX[0] = self.positionX[0] - 3 / np.abs(omega1)
+            if typeA == "alpha":
+                self.positionX[0] = self.positionX[0] + 3 / np.abs(omega1) * 2
+            else:
+                self.positionX[0] = self.positionX[0] - 3 / np.abs(omega1)
         self.couplesNum = couplesNum
         self.typeA = typeA
 
@@ -306,7 +309,7 @@ class TwoOsillators(SpatialGroups):
 
     @property
     def rawA(self):
-        if self.typeA == "heaviside":        
+        if self.typeA == "heaviside":
             return self.distance_x(self.deltaX) <= self.distanceD0
         elif self.typeA == "alpha":
             return (1 + self.distance_x(self.deltaX) / self.distanceD0) ** (-1 / self.distanceD0)
