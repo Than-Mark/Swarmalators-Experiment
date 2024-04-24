@@ -332,6 +332,8 @@ class TwoOsillators(SpatialGroups):
 
         if self.typeA != "heaviside":
             name += f"_{self.typeA}"
+        if self.couplesNum == 1:
+            name += "_c1"
 
         return name
 
