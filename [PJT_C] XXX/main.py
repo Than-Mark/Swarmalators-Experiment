@@ -166,3 +166,28 @@ class MobileDrive(Swarmalators2D):
 
     def __str__(self) -> str:
         return f"MobileDrive_a{self.agentsNum}_K{self.K:.2f}_J{self.J:.2f}_F{self.F:.2f}"
+    
+
+class StateAnalysis:
+    
+    @staticmethod
+    def calc_order_parameter_R(model: MobileDrive) -> float:
+        return np.abs(np.sum(np.exp(1j * model.phaseTheta))) / model.agentsNum
+    
+    @staticmethod
+    def calc_order_parameter_S(model: MobileDrive) -> float:
+        phi = np.arctan2(model.positionX[:, 1], model.positionX[:, 0])
+        Sadd = np.abs(np.sum(np.exp(1j * (phi + model.phaseTheta)))) / model.agentsNum
+        Ssub = np.abs(np.sum(np.exp(1j * (phi - model.phaseTheta)))) / model.agentsNum
+        return np.max([Sadd, Ssub])
+    
+    @staticmethod
+    def calc_order_parameter_Vp(model: MobileDrive) -> float:
+        dim = model.agentsNum
+        Iatt, Irep, Fatt, Frep = model.Iatt, model.Irep, model.Fatt, model.Frep
+        pointX = np.sum(
+            Iatt * Fatt.reshape((dim, dim, 1)) - Irep * Frep.reshape((dim, dim, 1)),
+            axis=1
+        ) / dim
+        phi = np.arctan2(pointX[:, 1], pointX[:, 0])
+        return np.abs(np.sum(np.exp(1j * phi))) / model.agentsNum
