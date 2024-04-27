@@ -10,6 +10,8 @@ import imageio
 import sys
 import os
 import shutil
+import warnings
+warnings.filterwarnings("ignore")
 
 randomSeed = 10
 
@@ -65,6 +67,8 @@ class MobileDrive(Swarmalators2D):
         self.druveRadiusR = 0.5
         self.drivePosition = np.array([0.5, 0])
         self.one = np.ones((agentsNum, agentsNum))
+        self.temp["pointX"] = np.zeros((agentsNum, 2)) * np.nan
+        self.temp["pointTheta"] = np.zeros(agentsNum) * np.nan
 
     @property
     def Fatt(self) -> np.ndarray:
@@ -116,9 +120,18 @@ class MobileDrive(Swarmalators2D):
         
         return self.F * np.cos(self.driveThateVelocityOmega * t - self.phaseTheta) / disance
 
+    def append(self):
+        if self.store is not None:
+            if self.counts % self.shotsnaps != 0:
+                return
+            self.store.append(key="positionX", value=pd.DataFrame(self.positionX))
+            self.store.append(key="phaseTheta", value=pd.DataFrame(self.phaseTheta))
+            self.store.append(key="pointX", value=pd.DataFrame(self.temp["pointX"]))
+            self.store.append(key="pointTheta", value=pd.DataFrame(self.temp["pointTheta"]))
+
     def update(self) -> None:
         self.update_temp()
-        self.positionX, self.phaseTheta = self._update(
+        pointX, pointTheta = self._calc_point(
             self.positionX, self.phaseTheta,
             self.velocity, self.omega,
             self.Iatt, self.Irep,
@@ -126,16 +139,21 @@ class MobileDrive(Swarmalators2D):
             self.H, self.G, self.P,
             self.K, self.dt, 
         )
+        self.temp["pointX"] = pointX
+        self.temp["pointTheta"] = pointTheta
+        self.positionX += pointX * self.dt
+        self.phaseTheta = np.mod(self.phaseTheta + pointTheta * self.dt, 2 * np.pi)
         t = self.counts * self.dt
         self.drivePosition = np.array([
             self.druveRadiusR * np.cos(self.driveAngularVelocityW * t),
             self.druveRadiusR * np.sin(self.driveAngularVelocityW * t)
         ])
+        
         self.counts += 1
 
     @staticmethod
     @nb.njit
-    def _update(
+    def _calc_point(
         positionX: np.ndarray, phaseTheta: np.ndarray,
         velocity: np.ndarray, omega: np.ndarray,
         Iatt: np.ndarray, Irep: np.ndarray,
@@ -148,10 +166,10 @@ class MobileDrive(Swarmalators2D):
             Iatt * Fatt.reshape((dim, dim, 1)) - Irep * Frep.reshape((dim, dim, 1)),
             axis=1
         ) / dim
-        positionX += pointX * dt
+        
         pointTheta = omega + K * np.sum(H * G, axis=1) / dim + P
-        phaseTheta = np.mod(phaseTheta + pointTheta * dt, 2 * np.pi)
-        return positionX, phaseTheta
+        
+        return pointX, pointTheta
 
     def plot(self, ax: plt.Axes = None) -> None:
         if ax is None:
@@ -178,12 +196,16 @@ class StateAnalysis:
         targetPath = f"{self.model.savePath}/{self.model}.h5"
         totalPositionX = pd.read_hdf(targetPath, key="positionX")
         totalPhaseTheta = pd.read_hdf(targetPath, key="phaseTheta")
+        totalPointX = pd.read_hdf(targetPath, key="pointX")
+        totalPointTheta = pd.read_hdf(targetPath, key="pointTheta")
         
         TNum = totalPositionX.shape[0] // self.model.agentsNum
         self.TNum = TNum
         self.tRange = np.arange(0, (TNum - 1) * model.shotsnaps, model.shotsnaps) * self.model.dt
         self.totalPositionX = totalPositionX.values.reshape(TNum, self.model.agentsNum, 2)
         self.totalPhaseTheta = totalPhaseTheta.values.reshape(TNum, self.model.agentsNum)
+        self.totalPointX = totalPointX.values.reshape(TNum, self.model.agentsNum, 2)
+        self.totalPointTheta = totalPointTheta.values.reshape(TNum, self.model.agentsNum)
         self.totalDrivePosition = np.array([
             model.druveRadiusR * np.cos(model.driveAngularVelocityW * self.tRange),
             model.druveRadiusR * np.sin(model.driveAngularVelocityW * self.tRange)
