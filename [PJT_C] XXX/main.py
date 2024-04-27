@@ -230,28 +230,16 @@ class StateAnalysis:
         Sadd = np.abs(np.sum(np.exp(1j * (phi + model.phaseTheta)))) / model.agentsNum
         Ssub = np.abs(np.sum(np.exp(1j * (phi - model.phaseTheta)))) / model.agentsNum
         return np.max([Sadd, Ssub])
-    
-    @staticmethod
-    @nb.njit
-    def _calc_pointX(Iatt, Irep, Fatt, Frep):
-        dim = Iatt.shape[0]
-        return np.sum(
-            Iatt * Fatt.reshape((dim, dim, 1)) - Irep * Frep.reshape((dim, dim, 1)),
-            axis=1
-        ) / dim
 
     @staticmethod
     def calc_order_parameter_Vp(model: MobileDrive) -> float:
-        Iatt, Irep, Fatt, Frep = model.Iatt, model.Irep, model.Fatt, model.Frep
-        pointX = StateAnalysis._calc_pointX(Iatt, Irep, Fatt, Frep)
+        pointX = model.temp["pointX"]
         phi = np.arctan2(pointX[:, 1], pointX[:, 0])
         return np.abs(np.sum(np.exp(1j * phi))) / model.agentsNum
     
     @staticmethod
     def calc_order_parameter_Ptr(model: MobileDrive) -> float:
-        K, H, G, P = model.K, model.H, model.G, model.P
-        dim = P.shape[0]
-        pointTheta = K * np.sum(H * G, axis=1) / dim + P
+        pointTheta = model.temp["pointTheta"]
         Ntr = np.abs(pointTheta - model.driveThateVelocityOmega) < 0.2 / model.dt * 0.1
         return Ntr.sum() / model.agentsNum
     
