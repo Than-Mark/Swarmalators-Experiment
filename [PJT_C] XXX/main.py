@@ -230,7 +230,7 @@ class StateAnalysis:
         K, H, G, P = model.K, model.H, model.G, model.P
         dim = P.shape[0]
         pointTheta = K * np.sum(H * G, axis=1) / dim + P
-        Ntr = np.abs(pointTheta - model.driveThateVelocityOmega) < 0.145 / model.dt * 0.1
+        Ntr = np.abs(pointTheta - model.driveThateVelocityOmega) < 0.2 / model.dt * 0.1
         return Ntr.sum() / model.agentsNum
     
     @staticmethod
