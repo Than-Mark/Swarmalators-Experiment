@@ -101,7 +101,7 @@ class MobileDrive(Swarmalators2D):
     @property
     def H(self) -> np.ndarray:
         """Phase interaction: sin(theta_j - theta_i)"""
-        return np.sin(self.deltaTheta)
+        return np.sin(self.temp["deltaTheta"])
     
     @property
     def G(self) -> np.ndarray:
@@ -112,10 +112,6 @@ class MobileDrive(Swarmalators2D):
     def P(self) -> np.ndarray:
         """External drive: F*cos(omega*t - theta_i) / |x_0 - x_i|"""
         t = self.counts * self.dt
-        self.drivePosition = np.array([
-            self.druveRadiusR * np.cos(self.driveAngularVelocityW * t),
-            self.druveRadiusR * np.sin(self.driveAngularVelocityW * t)
-        ])
         disance = self.distance_x(((self.positionX - self.drivePosition)[:, np.newaxis]))[:, 0]
         
         return self.F * np.cos(self.driveThateVelocityOmega * t - self.phaseTheta) / disance
@@ -130,6 +126,11 @@ class MobileDrive(Swarmalators2D):
             self.H, self.G, self.P,
             self.K, self.dt, 
         )
+        t = self.counts * self.dt
+        self.drivePosition = np.array([
+            self.druveRadiusR * np.cos(self.driveAngularVelocityW * t),
+            self.druveRadiusR * np.sin(self.driveAngularVelocityW * t)
+        ])
         self.counts += 1
 
     @staticmethod
@@ -156,7 +157,7 @@ class MobileDrive(Swarmalators2D):
         if ax is None:
             fig, ax = plt.subplots(figsize=(6, 5))
 
-        ax.scatter(self.drivePosition[0], self.drivePosition[1], c='r', s=100, marker='x', label="Drive")
+        ax.scatter(self.drivePosition[0], self.drivePosition[1], c='r', s=100, marker='x', zorder=10)
         sc = ax.scatter(self.positionX[:, 0], self.positionX[:, 1],
                     c=self.phaseTheta, cmap=new_cmap, alpha=0.8, vmin=0, vmax=2*np.pi)
 
@@ -169,7 +170,34 @@ class MobileDrive(Swarmalators2D):
     
 
 class StateAnalysis:
-    
+    def __init__(self, model: MobileDrive, lookIndex: int = -1, showTqdm: bool = False):
+        self.model = model
+        self.lookIndex = lookIndex
+        self.showTqdm = showTqdm
+        
+        targetPath = f"{self.model.savePath}/{self.model}.h5"
+        totalPositionX = pd.read_hdf(targetPath, key="positionX")
+        totalPhaseTheta = pd.read_hdf(targetPath, key="phaseTheta")
+        
+        TNum = totalPositionX.shape[0] // self.model.agentsNum
+        self.TNum = TNum
+        self.tRange = np.arange(0, (TNum - 1) * model.shotsnaps, model.shotsnaps) * self.model.dt
+        self.totalPositionX = totalPositionX.values.reshape(TNum, self.model.agentsNum, 2)
+        self.totalPhaseTheta = totalPhaseTheta.values.reshape(TNum, self.model.agentsNum)
+        self.totalDrivePosition = np.array([
+            model.druveRadiusR * np.cos(model.driveAngularVelocityW * self.tRange),
+            model.druveRadiusR * np.sin(model.driveAngularVelocityW * self.tRange)
+        ]).transpose(1, 0)
+        self.totalDrivePhaseTheta = np.mod(model.driveThateVelocityOmega * self.tRange, 2 * np.pi)
+
+        self.centersValue = None
+        self.classesValue = None
+
+        if self.showTqdm:
+            self.iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
+        else:
+            self.iterObject = range(1, self.totalPhaseTheta.shape[0])
+            
     @staticmethod
     def calc_order_parameter_R(model: MobileDrive) -> float:
         return np.abs(np.sum(np.exp(1j * model.phaseTheta))) / model.agentsNum
@@ -182,12 +210,42 @@ class StateAnalysis:
         return np.max([Sadd, Ssub])
     
     @staticmethod
-    def calc_order_parameter_Vp(model: MobileDrive) -> float:
-        dim = model.agentsNum
-        Iatt, Irep, Fatt, Frep = model.Iatt, model.Irep, model.Fatt, model.Frep
-        pointX = np.sum(
+    @nb.njit
+    def _calc_pointX(Iatt, Irep, Fatt, Frep):
+        dim = Iatt.shape[0]
+        return np.sum(
             Iatt * Fatt.reshape((dim, dim, 1)) - Irep * Frep.reshape((dim, dim, 1)),
             axis=1
         ) / dim
+
+    @staticmethod
+    def calc_order_parameter_Vp(model: MobileDrive) -> float:
+        Iatt, Irep, Fatt, Frep = model.Iatt, model.Irep, model.Fatt, model.Frep
+        pointX = StateAnalysis._calc_pointX(Iatt, Irep, Fatt, Frep)
         phi = np.arctan2(pointX[:, 1], pointX[:, 0])
         return np.abs(np.sum(np.exp(1j * phi))) / model.agentsNum
+    
+    @staticmethod
+    def calc_order_parameter_Ptr(model: MobileDrive) -> float:
+        K, H, G, P = model.K, model.H, model.G, model.P
+        dim = P.shape[0]
+        pointTheta = K * np.sum(H * G, axis=1) / dim + P
+        Ntr = np.abs(pointTheta - model.driveThateVelocityOmega) < 0.145 / model.dt * 0.1
+        return Ntr.sum() / model.agentsNum
+    
+    @staticmethod
+    def plot_last_state(model: MobileDrive, ax: plt.Axes, withColorBar: bool =True, s: float = 50, driveS: float = 100):
+        t = model.counts * model.dt
+        model.drivePosition = np.array([
+            np.cos(model.driveThateVelocityOmega * t) * model.druveRadiusR,
+            np.sin(model.driveThateVelocityOmega * t) * model.druveRadiusR
+        ])
+        ax.scatter(model.drivePosition[0], model.drivePosition[1], color="white", s=driveS, marker='o', edgecolors='k', zorder=10)
+        sc = ax.scatter(model.positionX[:, 0], model.positionX[:, 1], s=s,
+                    c=model.phaseTheta, cmap=new_cmap, alpha=0.8, vmin=0, vmax=2*np.pi)
+        driveCircle = plt.Circle((0, 0), model.druveRadiusR, color='black', fill=False, lw=2, linestyle='--')
+        ax.add_artist(driveCircle)
+        if withColorBar:
+            cbar = plt.colorbar(sc, ticks=[0, np.pi, 2*np.pi], ax=ax)
+            cbar.ax.set_ylim(0, 2*np.pi)
+            cbar.ax.set_yticklabels(['$0$', '$\pi$', '$2\pi$'])
