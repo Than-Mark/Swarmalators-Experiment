@@ -56,7 +56,7 @@ from swarmalatorlib.template import Swarmalators2D
 
 class DisWgtCouple(Swarmalators2D):
     def __init__(self, strengthLambda: float, alpha: float, boundaryLength: float = 10, 
-                 typeA: str = "heaviside", agentsNum: int=1000, dt: float=0.01, 
+                 typeA: str = "distanceWgt", agentsNum: int=1000, dt: float=0.01, 
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 10, 
                  distribution: str = "uniform", randomSeed: int = 10, overWrite: bool = False) -> None:
         assert distribution in ["uniform", "normal"]
