@@ -102,16 +102,17 @@ class ObsAvoid(Swarmalators2D):
     @property
     def pointTheta(self):
         return self._pointTheta(self.phaseTheta, self.strengthLambda, self.alpha,
-                                self.disDisSquare, self.temp["phi"], 
-                                self.A1, self.A2, self.dt)
+                                self.disDisSquare, 
+                                self.A, self.dt)
     
     @staticmethod
     @nb.njit
     def _pointTheta(phaseTheta: np.ndarray, strengthLambda: float, alpha: float, 
-                    divDisSquare: np.ndarray, phiValue: np.ndarray, 
-                    A1: np.ndarray, A2: np.ndarray, h: float):
+                    divDisSquare: np.ndarray, 
+                    A: np.ndarray, h: float):
+        otherTheta = np.repeat(phaseTheta, phaseTheta.shape[0]).reshape(phaseTheta.shape[0], phaseTheta.shape[0])
         k1 = strengthLambda * np.sum(
-            A1 * (phiValue - alpha - phaseTheta) * divDisSquare + A2 * (phiValue + alpha - phaseTheta) * divDisSquare
+            A * (otherTheta - phaseTheta) * divDisSquare
         , axis=0)
         return k1 * h
 
@@ -134,21 +135,12 @@ class ObsAvoid(Swarmalators2D):
 
     @staticmethod
     @nb.njit
-    def _A1(phaseTheta: np.ndarray, phiValue: np.ndarray, alpha: float) -> np.ndarray:
-        return (phiValue - alpha < phaseTheta) & (phaseTheta < phiValue)
+    def _A(phaseTheta: np.ndarray, phiValue: np.ndarray, alpha: float) -> np.ndarray:
+        return (phaseTheta - alpha < phiValue) & (phiValue < phaseTheta + alpha)
 
     @property
-    def A1(self):
-        return self._A1(self.phaseTheta, self.temp["phi"], self.alpha)
-
-    @staticmethod
-    @nb.njit
-    def _A2(phaseTheta: np.ndarray, phiValue: np.ndarray, alpha: float) -> np.ndarray:
-        return (phiValue < phaseTheta) & (phaseTheta < phiValue + alpha)
-
-    @property
-    def A2(self):
-        return self._A2(self.phaseTheta, self.temp["phi"], self.alpha)
+    def A(self):
+        return self._A(self.phaseTheta, self.temp["phi"], self.alpha)
 
     def update_temp(self):
         self.temp["deltaX"] = self.deltaX
