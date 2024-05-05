@@ -112,7 +112,7 @@ class DisWgtCouple(Swarmalators2D):
         if self.typeA == "heaviside":
             return self.distance_x(self.deltaX) <= self.alpha
         elif self.typeA == "distanceWgt":
-            return (1 + self.distance_x(self.deltaX) / self.alpha) ** (-1 / self.alpha)
+            return np.exp(-self.distance_x(self.deltaX) / self.alpha)
 
     @property
     def deltaX(self) -> np.ndarray:
