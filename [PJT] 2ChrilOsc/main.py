@@ -112,7 +112,7 @@ class TwoOsillators(Swarmalators2D):
         if self.typeA == "heaviside":
             rawA = self.distance_x(self.deltaX) <= self.r0
         elif self.typeA == "distanceWgt":
-            rawA = (1 + self.distance_x(self.deltaX) / self.r0) ** (-1 / self.r0)
+            rawA = np.exp(-self.distance_x(self.deltaX) / self.r0)
         if self.couplesNum == 2:
             return rawA
         else:
