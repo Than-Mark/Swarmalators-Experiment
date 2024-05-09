@@ -7,7 +7,7 @@ from tqdm import tqdm
 from itertools import product
 from main import ThreeBody
 
-def plot_last(model: ThreeBody):
+def plot_last(model: ThreeBody, alphaRate: float = 0.7):
 
     targetPath = f"./data/{model}.h5"
     class1, class2 = (
@@ -31,11 +31,11 @@ def plot_last(model: ThreeBody):
     ax1 = plt.subplot(1, 2, 1)
     ax1.quiver(
         positionX[class1, 0], positionX[class1, 1],
-        np.cos(phaseTheta[class1]), np.sin(phaseTheta[class1]), color='red'
+        np.cos(phaseTheta[class1]), np.sin(phaseTheta[class1]), color='red', alpha=(1 - alphaRate) + (np.abs(model.omegaTheta[class1]) - 1) / 2 * alphaRate
     )
     ax1.quiver(
         positionX[class2, 0], positionX[class2, 1],
-        np.cos(phaseTheta[class2]), np.sin(phaseTheta[class2]), color='blue'
+        np.cos(phaseTheta[class2]), np.sin(phaseTheta[class2]), color='blue', alpha=(1 - alphaRate) + (np.abs(model.omegaTheta[class2]) - 1) / 2 * alphaRate
     )
     ax1.spines['bottom'].set_color('black')
     ax1.spines['top'].set_color('black')
@@ -46,17 +46,17 @@ def plot_last(model: ThreeBody):
     ax1.set_xlabel(r"x")
     ax1.set_ylabel(r"y")
     ax1.grid(False)
-    ax1.set_xlim(0, 10)
-    ax1.set_ylim(0, 10)
+    ax1.set_xlim(0, 5)
+    ax1.set_ylim(0, 5)
 
     ax2 = plt.subplot(1, 2, 2)
     circle = plt.Circle((0, 0), 1, color='black', fill=False)
     ax2.add_artist(circle)
     ax2.scatter(
-        np.cos(phaseTheta[class1]), np.sin(phaseTheta[class1]), color='red', alpha=0.5
+        np.cos(phaseTheta[class1]), np.sin(phaseTheta[class1]), color='red', alpha=(1 - alphaRate) + (np.abs(model.omegaTheta[class1]) - 1) / 2 * alphaRate
     )
     ax2.scatter(
-        np.cos(phaseTheta[class2]), np.sin(phaseTheta[class2]), color='blue', alpha=0.5
+        np.cos(phaseTheta[class2]), np.sin(phaseTheta[class2]), color='blue', alpha=(1 - alphaRate) + (np.abs(model.omegaTheta[class2]) - 1) / 2 * alphaRate
     )
     lim = 1.2
     ax2.add_patch(patches.FancyArrowPatch(
@@ -78,7 +78,7 @@ def plot_last(model: ThreeBody):
     ax2.set_ylabel(r"$\sin\varphi_i$")
 
     plt.savefig(f"./figs/{model}_2d_circle.png", dpi=150)
-    plt.show()
+    plt.close()
 
 
 if __name__ == "__main__":
@@ -100,5 +100,6 @@ if __name__ == "__main__":
     for model in tqdm(models):
         try:
             plot_last(model)
-        except:
+        except Exception as e:
+            # print(e)
             continue
