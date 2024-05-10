@@ -43,8 +43,8 @@ sns.set_theme(font_scale=1.1, rc={
     'ytick.color': '#000000'
 })
 
-plt.rcParams['mathtext.fontset'] = 'stix'
-plt.rcParams['font.family'] = 'STIXGeneral'
+# plt.rcParams['mathtext.fontset'] = 'stix'
+# plt.rcParams['font.family'] = 'STIXGeneral'
 if os.path.exists("/opt/conda/bin/ffmpeg"):
     plt.rcParams['animation.ffmpeg_path'] = "/opt/conda/bin/ffmpeg"
 else:
@@ -191,37 +191,38 @@ class MobileDrive(Swarmalators2D):
     
 
 class StateAnalysis:
-    def __init__(self, model: MobileDrive, lookIndex: int = -1, showTqdm: bool = False):
-        self.model = model
+    def __init__(self, model: MobileDrive = None, lookIndex: int = -1, showTqdm: bool = False):
         self.lookIndex = lookIndex
         self.showTqdm = showTqdm
-        
-        targetPath = f"{self.model.savePath}/{self.model}.h5"
-        totalPositionX = pd.read_hdf(targetPath, key="positionX")
-        totalPhaseTheta = pd.read_hdf(targetPath, key="phaseTheta")
-        totalPointX = pd.read_hdf(targetPath, key="pointX")
-        totalPointTheta = pd.read_hdf(targetPath, key="pointTheta")
-        totalDrivePosAndPhs = pd.read_hdf(targetPath, key="drivePosAndPhs")
-        
-        TNum = totalPositionX.shape[0] // self.model.agentsNum
-        self.TNum = TNum
-        self.tRange = np.arange(0, (TNum - 1) * model.shotsnaps, model.shotsnaps) * self.model.dt
-        self.totalPositionX = totalPositionX.values.reshape(TNum, self.model.agentsNum, 2)
-        self.totalPhaseTheta = totalPhaseTheta.values.reshape(TNum, self.model.agentsNum)
-        self.totalPointX = totalPointX.values.reshape(TNum, self.model.agentsNum, 2)
-        self.totalPointTheta = totalPointTheta.values.reshape(TNum, self.model.agentsNum)
-        totalDrivePosAndPhs = totalDrivePosAndPhs.values.reshape(TNum, 3)
-        self.totalDrivePosition = totalDrivePosAndPhs[:, :2]
-        self.totalDrivePhaseTheta = totalDrivePosAndPhs[:, 2]
 
-        self.centersValue = None
-        self.classesValue = None
-
-        if self.showTqdm:
-            self.iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
-        else:
-            self.iterObject = range(1, self.totalPhaseTheta.shape[0])
+        if model is not None:
+            self.model = model
+            targetPath = f"{self.model.savePath}/{self.model}.h5"
+            totalPositionX = pd.read_hdf(targetPath, key="positionX")
+            totalPhaseTheta = pd.read_hdf(targetPath, key="phaseTheta")
+            totalPointX = pd.read_hdf(targetPath, key="pointX")
+            totalPointTheta = pd.read_hdf(targetPath, key="pointTheta")
+            totalDrivePosAndPhs = pd.read_hdf(targetPath, key="drivePosAndPhs")
             
+            TNum = totalPositionX.shape[0] // self.model.agentsNum
+            self.TNum = TNum
+            self.tRange = np.arange(0, (TNum - 1) * model.shotsnaps, model.shotsnaps) * self.model.dt
+            self.totalPositionX = totalPositionX.values.reshape(TNum, self.model.agentsNum, 2)
+            self.totalPhaseTheta = totalPhaseTheta.values.reshape(TNum, self.model.agentsNum)
+            self.totalPointX = totalPointX.values.reshape(TNum, self.model.agentsNum, 2)
+            self.totalPointTheta = totalPointTheta.values.reshape(TNum, self.model.agentsNum)
+            totalDrivePosAndPhs = totalDrivePosAndPhs.values.reshape(TNum, 3)
+            self.totalDrivePosition = totalDrivePosAndPhs[:, :2]
+            self.totalDrivePhaseTheta = totalDrivePosAndPhs[:, 2]
+
+            if self.showTqdm:
+                self.iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
+            else:
+                self.iterObject = range(1, self.totalPhaseTheta.shape[0])
+
+    def get_state(self, index: int = -1):
+        return self.totalPositionX[index], self.totalPhaseTheta[index], self.totalDrivePosition[index], self.totalDrivePhaseTheta[index]
+
     @staticmethod
     def calc_order_parameter_R(model: MobileDrive) -> float:
         return np.abs(np.sum(np.exp(1j * model.phaseTheta))) / model.agentsNum
@@ -260,12 +261,28 @@ class StateAnalysis:
             sc = ax.scatter(model.positionX[:, 0], model.positionX[:, 1], s=s,
                             c=model.phaseTheta, cmap=new_cmap, alpha=0.8, vmin=0, vmax=2*np.pi)
             driveCircle = plt.Circle((0, 0), model.druveRadiusR, color='black', fill=False, lw=2, linestyle='--')
+            maxPos = np.abs(model.positionX).max()
         else:
             ax.scatter(self.totalDrivePosition[self.lookIndex, 0], self.totalDrivePosition[self.lookIndex, 1], 
                        color="white", s=driveS, marker='o', edgecolors='k', zorder=10)
             sc = ax.scatter(self.totalPositionX[self.lookIndex, :, 0], self.totalPositionX[self.lookIndex, :, 1], s=s,
                             c=self.totalPhaseTheta[self.lookIndex], cmap=new_cmap, alpha=0.8, vmin=0, vmax=2*np.pi)
             driveCircle = plt.Circle((0, 0), self.model.druveRadiusR, color='black', fill=False, lw=2, linestyle='--')
+            maxPos = np.abs(self.totalPositionX[self.lookIndex]).max()
+            # print(maxPos)
+        if maxPos < 1:
+            ax.set_xlim(-1, 1)
+            ax.set_ylim(-1, 1)
+            ax.set_xticks([-1, -0.5, 0, 0.5, 1])
+            ax.set_yticks([-1, -0.5, 0, 0.5, 1])
+        else:
+            bound = maxPos * 1.05
+            roundBound = np.round(bound)
+            ax.set_xlim(-bound, bound)
+            ax.set_ylim(-bound, bound)
+            ax.set_xticks([-roundBound, -roundBound / 2, 0, roundBound / 2, roundBound])
+            ax.set_yticks([-roundBound, -roundBound / 2, 0, roundBound / 2, roundBound])
+        
         
         ax.add_artist(driveCircle)
         if withColorBar:
