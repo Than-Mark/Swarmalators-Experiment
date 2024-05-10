@@ -10,3 +10,4 @@
 *.eps
 test.ipynb
 *.xlsx
+*.npy
