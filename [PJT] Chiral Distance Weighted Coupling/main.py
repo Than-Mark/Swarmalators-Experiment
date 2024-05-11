@@ -1,8 +1,8 @@
 import matplotlib.colors as mcolors
 import matplotlib.animation as ma
 import matplotlib.pyplot as plt
+from typing import List, Tuple
 from itertools import product
-from typing import List
 import pandas as pd
 import numpy as np
 import numba as nb
@@ -169,3 +169,246 @@ class DisWgtCouple(Swarmalators2D):
     def close(self):
         if self.store is not None:
             self.store.close()
+
+
+class VariableParam(DisWgtCouple):
+    def __init__(self, strengthLambda: float, alpha: float, 
+                 lambdaArray: np.ndarray = None, alphaArray: np.ndarray = None,
+                 boundaryLength: float = 10, typeA: str = "distanceWgt", agentsNum: int=1000, dt: float=0.01, 
+                 tqdm: bool = False, savePath: str = None, shotsnaps: int = 10,
+                 distribution: str = "uniform", randomSeed: int = 10, overWrite: bool = False):
+        super().__init__(strengthLambda, alpha, boundaryLength, typeA, agentsNum, dt, tqdm, savePath, shotsnaps, distribution, randomSeed, overWrite)
+
+        if (lambdaArray is not None) & (alphaArray is not None):
+            raise ValueError("Adiabatic tuning can only be one-dimensional")
+        if lambdaArray is None:
+            lambdaArray = np.ones_like(alphaArray) * self.strengthLambda
+            self.diraction = f"Alpha.{alphaArray[0]:.2f}t{alphaArray[-1]:.2f}c{len(alphaArray)}"
+        elif alphaArray is None:
+            alphaArray = np.ones_like(lambdaArray) * self.distanceD0
+            self.diraction = f"StrengthLambda.{lambdaArray[0]:.3f}t{lambdaArray[-1]:.3f}c{len(lambdaArray)}"
+        else:
+            raise ValueError("lambdaArray and alphaArray cannot be None at the same time")
+        
+        self.lambdaArray = lambdaArray
+        self.alphaArray = alphaArray
+        self.oldName = self.get_old_name()
+        targetPath = f"./data/{self.oldName}.h5"
+        totalPositionX = pd.read_hdf(targetPath, key="positionX")
+        totalPhaseTheta = pd.read_hdf(targetPath, key="phaseTheta")
+
+        TNum = totalPositionX.shape[0] // self.agentsNum
+        totalPositionX = totalPositionX.values.reshape(TNum, self.agentsNum, 2)
+        totalPhaseTheta = totalPhaseTheta.values.reshape(TNum, self.agentsNum)
+        
+        self.positionX = totalPositionX[-1]
+        self.phaseTheta = totalPhaseTheta[-1]
+
+    def get_old_name(self) -> str:
+        return super().__str__()
+    
+    def __str__(self) -> str:
+        return self.oldName.replace("CorrectCoupling", f"CorrectCouplingAfter{self.diraction}")
+    
+    def run(self):
+
+        if not self.init_store():
+            return
+
+        TNum = self.lambdaArray.shape[0]
+        if self.tqdm:
+            iterRange = tqdm(range(TNum))
+        else:
+            iterRange = range(TNum)
+
+        for idx in iterRange:
+            self.strengthLambda = self.lambdaArray[idx]
+            self.alpha = self.alphaArray[idx]
+            self.update()
+            self.append()
+            self.counts = idx
+
+        self.close()
+
+
+class StateAnalysis:
+    def __init__(self, model: DisWgtCouple = None, classDistance: float = 2, 
+                 lookIndex: int = -1, showTqdm: bool = False):
+        
+        self.classDistance = classDistance
+        self.lookIndex = lookIndex
+        self.showTqdm = showTqdm
+        
+        if model is not None:
+            self.model = model
+            targetPath = f"{self.model.savePath}/{self.model}.h5"
+            totalPositionX = pd.read_hdf(targetPath, key="positionX")
+            totalPhaseTheta = pd.read_hdf(targetPath, key="phaseTheta")
+            totalPointTheta = pd.read_hdf(targetPath, key="pointTheta")
+            
+            TNum = totalPositionX.shape[0] // self.model.agentsNum
+            self.TNum = TNum
+            self.totalPositionX = totalPositionX.values.reshape(TNum, self.model.agentsNum, 2)
+            self.totalPhaseTheta = totalPhaseTheta.values.reshape(TNum, self.model.agentsNum)
+            self.totalPointTheta = totalPointTheta.values.reshape(TNum, self.model.agentsNum)
+
+            if self.showTqdm:
+                self.iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
+            else:
+                self.iterObject = range(1, self.totalPhaseTheta.shape[0])
+
+    def get_state(self, index: int = -1):
+        positionX = self.totalPositionX[index]
+        phaseTheta = self.totalPhaseTheta[index]
+        pointTheta = self.totalPointTheta[index]
+
+        return positionX, phaseTheta, pointTheta
+
+    @staticmethod
+    @nb.njit
+    def _calc_centers(positionX, phaseTheta, pointTheta, speedV, dt):
+        centers = np.zeros((positionX.shape[0], 2))
+        centers[:, 0] = positionX[:, 0] - speedV * dt / pointTheta * np.sin(phaseTheta)
+        centers[:, 1] = positionX[:, 1] + speedV * dt / pointTheta * np.cos(phaseTheta)
+
+        return centers
+
+    @property
+    def centers(self):
+        
+        lastPositionX, lastPhaseTheta, lastPointTheta = self.get_state(self.lookIndex)
+        
+        centers = self._calc_centers(
+            lastPositionX, lastPhaseTheta, lastPointTheta, self.model.speedV, self.model.dt
+        )
+
+        return np.mod(centers, self.model.boundaryLength)
+
+    @property
+    def centersNoMod(self):
+            
+        lastPositionX, lastPhaseTheta, lastPointTheta = self.get_state(self.lookIndex)
+        
+        centers = self._calc_centers(
+            lastPositionX, lastPhaseTheta, lastPointTheta, self.model.speedV, self.model.dt
+        )
+
+        return centers
+         
+    
+    def adj_distance(self, positionX, others):
+        return self._adj_distance(
+            positionX, others, self.model.boundaryLength, self.model.halfBoundaryLength
+        )
+
+    @staticmethod
+    @nb.njit
+    def _adj_distance(positionX, others, boundaryLength, halfLength):
+        subX = positionX - others
+        adjustOthers = (
+            others * (-halfLength <= subX) * (subX <= halfLength) + 
+            (others - boundaryLength) * (subX < -halfLength) + 
+            (others + boundaryLength) * (subX > halfLength)
+        )
+        adjustSubX = positionX - adjustOthers
+        return np.sqrt(np.sum(adjustSubX ** 2, axis=-1))
+    
+    @staticmethod
+    @nb.njit
+    def _calc_classes(centers, classDistance, totalDistances):
+        classes = [[0]]
+        classNum = 1
+        nonClassifiedOsci = np.arange(1, centers.shape[0])
+
+        for i in nonClassifiedOsci:
+            newClass = True
+
+            for classI in range(len(classes)):
+                distance = classDistance
+                for j in classes[classI]:
+                    if totalDistances[i, j] < distance:
+                        distance = totalDistances[i, j]
+                if distance < classDistance:
+                    classes[classI].append(i)
+                    newClass = False
+                    break
+
+            if newClass:
+                classNum += 1
+                classes.append([i])
+
+        newClasses = [classes[0]]
+
+        for subClass in classes[1:]:
+            newClass = True
+            for newClassI in range(len(newClasses)):
+                distance = classDistance
+                for i in newClasses[newClassI]:
+                    for j in subClass:
+                        if totalDistances[i, j] < distance:
+                            distance = totalDistances[i, j]
+                if distance < classDistance:
+                    newClasses[newClassI] += subClass
+                    newClass = False
+                    break
+
+            if newClass:
+                newClasses.append(subClass)
+    
+        return newClasses
+
+    def get_classes_centers(self):
+        centers = self.centers
+        classes = self._calc_classes(
+            centers, self.classDistance, self.adj_distance(centers, centers[:, np.newaxis])
+        )
+        return {i + 1: classes[i] for i in range(len(classes))}, centers
+
+    def plot_spatial(self, ax: plt.Axes = None, oscis: np.ndarray = None, index: int = -1, **kwargs):
+        positionX, phaseTheta, pointTheta = self.get_state(index)
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(6, 6))
+        if oscis is None:
+            oscis = np.arange(self.model.agentsNum)
+
+        ax.quiver(
+            positionX[oscis, 0], positionX[oscis, 1],
+            np.cos(phaseTheta[oscis]), np.sin(phaseTheta[oscis]), **kwargs
+        )
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 10)    
+
+    def plot_centers(self, ax: plt.Axes = None, index: int = -1):
+        positionX, phaseTheta, pointTheta = self.get_state(index)
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(6, 6))
+
+        quiverColors = ["#FF4B4E"] * 500 + ["#414CC7"] * 500
+        ax.quiver(
+            positionX[:, 0], positionX[:, 1],
+            np.cos(phaseTheta[:]), np.sin(phaseTheta[:]), color=quiverColors, alpha=0.8
+        )
+        centerColors = ["#FBDD85"] * 500 + ["#80A6E2"] * 500
+        centers = self.centers
+        ax.scatter(centers[:, 0], centers[:, 1], color=centerColors, s=5)
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 10)    
+        ax.set_xticks([0, 5, 10])
+        ax.set_yticks([0, 5, 10])
+        ax.grid(False)
+        ax.spines['bottom'].set_color('black')
+        ax.spines['top'].set_color('black')
+        ax.spines['left'].set_color('black')
+        ax.spines['right'].set_color('black')
+        ax.set_xlabel(r"$x$", fontsize=16)
+        ax.set_ylabel(r"$y$", fontsize=16, rotation=0)
+    
+    def calc_order_parameter_R(self, state: Tuple[np.ndarray, np.ndarray, np.ndarray] = None):
+        if state is None:
+            _, phaseTheta, _ = self.get_state(self.lookIndex)
+        else:
+            _, phaseTheta, _ = state
+
+        return np.abs(np.sum(np.exp(1j * phaseTheta))) / phaseTheta.size
