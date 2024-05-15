@@ -445,15 +445,15 @@ class StateAnalysis:
 
     @staticmethod
     @nb.njit
-    def _calc_centers(positionX, phaseTheta, pointTheta, speedV):
+    def _calc_centers(positionX, phaseTheta, pointTheta, speedV, dt):
         centers = np.zeros((positionX.shape[0], 2))
 
         for i in range(positionX.shape[0]):
             position, phase, point = positionX[i], phaseTheta[i], pointTheta[i]
             point1 = position
-            velocity1 = speedV * np.array([np.cos(phase), np.sin(phase)])
+            velocity1 = speedV * dt * np.array([np.cos(phase), np.sin(phase)])
             point2 = position + velocity1
-            velocity2 = speedV * np.array([np.cos(phase + point), np.sin(phase + point)])
+            velocity2 = speedV * dt * np.array([np.cos(phase + point), np.sin(phase + point)])
 
             unit_velocity1 = velocity1 / np.linalg.norm(velocity1)
             unit_velocity2 = velocity2 / np.linalg.norm(velocity2)
@@ -480,7 +480,7 @@ class StateAnalysis:
         lastPositionX, lastPhaseTheta, lastPointTheta = self.get_state(self.lookIndex)
         
         centers = self._calc_centers(
-            lastPositionX, lastPhaseTheta, lastPointTheta, self.model.speedV
+            lastPositionX, lastPhaseTheta, lastPointTheta, self.model.speedV, self.model.dt
         )
 
         return np.mod(centers, self.model.boundaryLength)
@@ -491,7 +491,7 @@ class StateAnalysis:
         lastPositionX, lastPhaseTheta, lastPointTheta = self.get_state(self.lookIndex)
         
         centers = self._calc_centers(
-            lastPositionX, lastPhaseTheta, lastPointTheta, self.model.speedV
+            lastPositionX, lastPhaseTheta, lastPointTheta, self.model.speedV, self.model.dt
         )
 
         return centers
