@@ -55,10 +55,10 @@ if __name__ == "__main__":
 
     models = [
         MobileDrive(agentsNum=500, K=K, J=J, F=F, savePath="./dataForMp4", randomSeed=10, dt=0.03, tqdm=True, overWrite=True)
-        for K, J, F in product([Ks[13]], [1], [Fs[0], Fs[3], Fs[6], Fs[12]])
+        for K, J, F in product([0], [1], [0, 0.1, 0.2, 0.3, 0.4, 0.5])
     ]
 
-    with Pool(4) as p:
+    with Pool(6) as p:
         # p.map(run_model, models)
 
         p.map(
