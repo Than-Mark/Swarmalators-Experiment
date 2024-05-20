@@ -53,12 +53,19 @@ if __name__ == "__main__":
     Fs = np.linspace(0, 5, 30)
     Ks = np.sort(np.concatenate([np.linspace(-1, 1, 30), [0]]))
 
+    # models = [
+    #     MobileDrive(agentsNum=500, K=K, J=J, F=F, savePath="./dataForMp4", randomSeed=10, dt=0.03, tqdm=True, overWrite=True)
+    #     for K, J, F in product([0], [1], [0, 0.1, 0.2, 0.3, 0.4, 0.5])
+    # ]
     models = [
-        MobileDrive(agentsNum=500, K=K, J=J, F=F, savePath="./dataForMp4", randomSeed=10, dt=0.03, tqdm=True, overWrite=True)
-        for K, J, F in product([0], [1], [0, 0.1, 0.2, 0.3, 0.4, 0.5])
+        MobileDrive(agentsNum=500, K=-1, J=1, F=0, savePath="./dataForMp4", randomSeed=10, dt=0.03, tqdm=True, overWrite=True),
+        MobileDrive(agentsNum=500, K=-0.724, J=1, F=0, savePath="./dataForMp4", randomSeed=10, dt=0.03, tqdm=True, overWrite=True),
+        MobileDrive(agentsNum=500, K=-0.1, J=1, F=0, savePath="./dataForMp4", randomSeed=10, dt=0.03, tqdm=True, overWrite=True),
+        MobileDrive(agentsNum=500, K=0, J=1, F=0, savePath="./dataForMp4", randomSeed=10, dt=0.03, tqdm=True, overWrite=True),
+        MobileDrive(agentsNum=500, K=1, J=0.1, F=0, savePath="./dataForMp4", randomSeed=10, dt=0.03, tqdm=True, overWrite=True),
     ]
 
-    with Pool(6) as p:
+    with Pool(5) as p:
         # p.map(run_model, models)
 
         p.map(

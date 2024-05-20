@@ -246,7 +246,7 @@ class StateAnalysis:
         Ntr = np.abs(pointTheta - model.driveThateVelocityOmega) < 0.2 / model.dt * 0.1
         return Ntr.sum() / model.agentsNum
     
-    def plot_last_state(self, model: MobileDrive = None, ax: plt.Axes = None, withColorBar: bool =True, 
+    def plot_last_state(self, model: MobileDrive = None, ax: plt.Axes = None, withColorBar: bool =True, withDriver: bool = True,
                         s: float = 50, driveS: float = 100) -> None:
         if ax is None:
             fig, ax = plt.subplots(figsize=(5, 4))
@@ -257,17 +257,21 @@ class StateAnalysis:
                 np.cos(model.driveThateVelocityOmega * t) * model.druveRadiusR,
                 np.sin(model.driveThateVelocityOmega * t) * model.druveRadiusR
             ])
-            ax.scatter(drivePosition[0], drivePosition[1], color="white", s=driveS, marker='o', edgecolors='k', zorder=10)
+            if withDriver:
+                ax.scatter(drivePosition[0], drivePosition[1], color="white", s=driveS, marker='o', edgecolors='k', zorder=10)
+                driveCircle = plt.Circle((0, 0), model.druveRadiusR, color='black', fill=False, lw=2, linestyle='--')
+                ax.add_artist(driveCircle)
             sc = ax.scatter(model.positionX[:, 0], model.positionX[:, 1], s=s,
                             c=model.phaseTheta, cmap=new_cmap, alpha=0.8, vmin=0, vmax=2*np.pi)
-            driveCircle = plt.Circle((0, 0), model.druveRadiusR, color='black', fill=False, lw=2, linestyle='--')
             maxPos = np.abs(model.positionX).max()
         else:
-            ax.scatter(self.totalDrivePosition[self.lookIndex, 0], self.totalDrivePosition[self.lookIndex, 1], 
-                       color="white", s=driveS, marker='o', edgecolors='k', zorder=10)
+            if withDriver:
+                ax.scatter(self.totalDrivePosition[self.lookIndex, 0], self.totalDrivePosition[self.lookIndex, 1], 
+                           color="white", s=driveS, marker='o', edgecolors='k', zorder=10)
+                driveCircle = plt.Circle((0, 0), self.model.druveRadiusR, color='black', fill=False, lw=2, linestyle='--')
+                ax.add_artist(driveCircle)
             sc = ax.scatter(self.totalPositionX[self.lookIndex, :, 0], self.totalPositionX[self.lookIndex, :, 1], s=s,
                             c=self.totalPhaseTheta[self.lookIndex], cmap=new_cmap, alpha=0.8, vmin=0, vmax=2*np.pi)
-            driveCircle = plt.Circle((0, 0), self.model.druveRadiusR, color='black', fill=False, lw=2, linestyle='--')
             maxPos = np.abs(self.totalPositionX[self.lookIndex]).max()
             # print(maxPos)
         if maxPos < 1:
@@ -283,8 +287,6 @@ class StateAnalysis:
             ax.set_xticks([-roundBound, -roundBound / 2, 0, roundBound / 2, roundBound])
             ax.set_yticks([-roundBound, -roundBound / 2, 0, roundBound / 2, roundBound])
         
-        
-        ax.add_artist(driveCircle)
         if withColorBar:
             cbar = plt.colorbar(sc, ticks=[0, np.pi, 2*np.pi], ax=ax)
             cbar.ax.set_ylim(0, 2*np.pi)
