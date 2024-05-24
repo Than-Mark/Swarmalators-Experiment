@@ -146,7 +146,8 @@ class TwoOsillators(Swarmalators2D):
         self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta) * self.dt
         self.temp = self.pointTheta
         self.phaseTheta += self.temp
-        self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
+        # self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
+        # self.phaseTheta = np.mod(self.phaseTheta, 2 * np.pi)
 
     @property
     def deltaX(self) -> np.ndarray:
@@ -155,7 +156,7 @@ class TwoOsillators(Swarmalators2D):
     def __str__(self) -> str:
         
         name =  (
-            f"TwoOsillators_{self.typeA}_o1.{self.omegaTheta[0]}_o2.{self.omegaTheta[0]}_"
+            f"TwoOsillators_{self.typeA}_o1.{self.omegaTheta[0]}_o2.{self.omegaTheta[1]}_"
             f"{self.strengthLambda:.3f}_{self.r0:.2f}_{self.randomSeed}_c{self.couplesNum}"
         )
         
