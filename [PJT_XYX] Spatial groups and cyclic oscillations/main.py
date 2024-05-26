@@ -41,8 +41,8 @@ def colors_idx(phaseTheta):
 #     'ytick.color': '#000000'
 # })
 
-plt.rcParams['mathtext.fontset'] = 'stix'
-plt.rcParams['font.family'] = 'STIXGeneral'
+# plt.rcParams['mathtext.fontset'] = 'stix'
+# plt.rcParams['font.family'] = 'STIXGeneral'
 if os.path.exists("/opt/conda/bin/ffmpeg"):
     plt.rcParams['animation.ffmpeg_path'] = "/opt/conda/bin/ffmpeg"
 else:
@@ -350,7 +350,7 @@ class SingleDistribution(SpatialGroups):
         self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi - np.pi
         self.agentsNum = agentsNum
         self.dt = dt
-        self.speedV = 0.03
+        self.speedV = 3
         self.distanceD0 = distanceD0
         if distributType == "uniform":
             self.omegaTheta = np.random.uniform(1, 3, size=agentsNum)
@@ -389,8 +389,8 @@ class SingleDistribution(SpatialGroups):
             self.positionX[:, 0], self.positionX[:, 1],
             np.cos(self.phaseTheta[:]), np.sin(self.phaseTheta[:]), color='dodgerblue'
         )
-        plt.xlim(0, 10)
-        plt.ylim(0, 10)
+        plt.xlim(0, self.boundaryLength)
+        plt.ylim(0, self.boundaryLength)
 
 
 class StateAnalysis:
