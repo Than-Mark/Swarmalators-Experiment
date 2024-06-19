@@ -35,7 +35,7 @@ sys.path.append("..")
 from swarmalatorlib.template import Swarmalators2D
 
 
-class SelfPropSwarmalator(Swarmalators2D):
+class SelfAdaptiveChiralOsc(Swarmalators2D):
     def __init__(self, K: float, J: float, 
                  distanceD0: float, boundaryLength: float = 10, 
                  agentsNum: int=1000, dt: float=0.01, speedV: float=3,
@@ -91,11 +91,11 @@ class SelfPropSwarmalator(Swarmalators2D):
             fig, ax = plt.subplots(figsize=(5, 5))
         plt.quiver(
             self.positionX[:self.agentsNum // 2, 0], self.positionX[:self.agentsNum // 2, 1],
-            np.cos(self.phaseTheta[:self.agentsNum // 2]), np.sin(self.phaseTheta[:self.agentsNum // 2]), color='tomato'
+            np.cos(self.vecAnglePhi[:self.agentsNum // 2]), np.sin(self.vecAnglePhi[:self.agentsNum // 2]), color='tomato'
         )
         plt.quiver(
             self.positionX[self.agentsNum // 2:, 0], self.positionX[self.agentsNum // 2:, 1],
-            np.cos(self.phaseTheta[self.agentsNum // 2:]), np.sin(self.phaseTheta[self.agentsNum // 2:]), color='dodgerblue'
+            np.cos(self.vecAnglePhi[self.agentsNum // 2:]), np.sin(self.vecAnglePhi[self.agentsNum // 2:]), color='dodgerblue'
         )
         plt.xlim(0, self.boundaryLength)
         plt.ylim(0, self.boundaryLength)
@@ -122,24 +122,28 @@ class SelfPropSwarmalator(Swarmalators2D):
 
     @property
     def dotTheta(self):
-        return self._dotTheta(self.freqOmega, 
-                              self.temp["deltaTheta"], self.temp["deltaPhi"],
-                              self.K, self.G)
+        return self._dotTheta(
+            self.freqOmega, self.temp["deltaTheta"],
+            self.K, self.G
+        )
 
     @staticmethod
     @nb.njit
-    def _dotTheta(freqOmega: np.ndarray, deltaTheta: np.ndarray, deltaPhi: np.ndarray, 
+    def _dotTheta(freqOmega: np.ndarray, deltaTheta: np.ndarray,
                   K: float, G: np.ndarray):
-        return freqOmega + K * np.sum(G * np.sin(deltaTheta) * np.cos(deltaPhi), axis=0) / deltaTheta.shape[0]
+        return freqOmega + K * np.sum(G * np.sin(deltaTheta), axis=1)
 
     @property
     def dotPhi(self) -> np.ndarray:
-        return self._dotPhi(self.temp["deltaPhi"], self.temp["deltaTheta"], self.J, self.G)
+        return self._dotPhi(
+            self.phaseTheta - self.vecAnglePhi, 
+            self.temp["deltaTheta"], self.J, self.G
+        )
 
     @staticmethod
     @nb.njit
-    def _dotPhi(deltaPhi: np.ndarray, deltaTheta: np.ndarray, J: float, G: np.ndarray):
-        return J * np.sum(G * np.sin(deltaPhi) * np.cos(deltaTheta), axis=0) / deltaPhi.shape[0]
+    def _dotPhi(thetaSubPhi: np.ndarray, deltaTheta: np.ndarray, J: float, G: np.ndarray):
+        return J * np.sin(thetaSubPhi) * np.sum(G * np.cos(deltaTheta), axis=1)
 
     @property
     def deltaPhi(self) -> np.ndarray:
@@ -163,6 +167,7 @@ class SelfPropSwarmalator(Swarmalators2D):
         self.temp["dotPhi"] = self.dotPhi
 
     def update(self):
+        self.update_temp()
         self.positionX[:, 0] += self.speedV * np.cos(self.vecAnglePhi) * self.dt
         self.positionX[:, 1] += self.speedV * np.sin(self.vecAnglePhi) * self.dt
         self.positionX = np.mod(self.positionX, self.boundaryLength)
@@ -183,3 +188,17 @@ class SelfPropSwarmalator(Swarmalators2D):
     def close(self):
         if self.store is not None:
             self.store.close()
+
+
+class SelfAdaptiveChiralSW(SelfAdaptiveChiralOsc):
+    @property
+    def dotPhi(self) -> np.ndarray:
+        return self._dotPhi(
+            self.temp["deltaPhi"], 
+            self.temp["deltaTheta"], self.J, self.G
+        )
+
+    @staticmethod
+    @nb.njit
+    def _dotPhi(deltaPhi: np.ndarray, deltaTheta: np.ndarray, J: float, G: np.ndarray):
+        return J * np.sum(G * np.sin(deltaPhi) * np.cos(deltaTheta), axis=1)
