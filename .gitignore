@@ -11,3 +11,4 @@
 test.ipynb
 *.xlsx
 *.npy
+*.parquet
