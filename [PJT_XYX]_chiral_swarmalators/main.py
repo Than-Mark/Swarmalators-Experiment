@@ -606,30 +606,6 @@ class StateAnalysis:
         ax.set_xlabel(r"$x$", fontsize=16)
         ax.set_ylabel(r"$y$", fontsize=16, rotation=0)
     
-    def center_radius_op(self, classOsci: np.ndarray):
-        centers = self.centers
-        return self.adj_distance(centers[classOsci], self.totalPositionX[:, classOsci]).mean(axis=1)
-    
-    def tv_center_radius_op(self, step: int = 10):
-        centerRadios = []
-
-        if self.showTqdm:
-            iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
-        else:
-            iterObject = range(1, self.totalPhaseTheta.shape[0])
-
-        for i in iterObject:
-            if i % step != 0:
-                continue
-            self.lookIndex = i
-            centers = self.centersNoMod
-            modCenters = np.mod(centers, self.model.boundaryLength)
-            distance = self.adj_distance(modCenters, self.totalPositionX[i])
-            d = np.mean(distance)
-            centerRadios = centerRadios + [d] * step
-
-        return np.array(centerRadios)
-    
     def tv_center_position(self, step: int = 30):
         color = ["red"] * 500 + ["blue"] * 500
 
@@ -660,37 +636,6 @@ class StateAnalysis:
         colors = np.concatenate(colors, axis=0)
 
         return np.array([t, positionX, positionY]).T, colors
-
-    def tv_center_radius(self, step: int = 30):
-        
-        color = ["tomato"] * 500 + ["dodgerblue"] * 500
-
-        t = []
-        centerRadios = []
-        colors = []
-
-        if self.showTqdm:
-            iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
-        else:
-            iterObject = range(1, self.totalPhaseTheta.shape[0])
-
-        for i in iterObject:
-            if i % step != 0:
-                continue
-            self.lookIndex = i
-
-            centers = self.centersNoMod
-            t.append(np.ones(self.model.agentsNum) * i)
-            centerRadios.append(
-                np.sqrt(np.sum((centers - self.totalPositionX[i])**2, axis=-1))
-            )  # self.adj_distance(self.totalPositionX[i], centers)
-            colors.append(color)
-
-        t = np.concatenate(t, axis=0)
-        centerRadios = np.concatenate(centerRadios, axis=0)
-        colors = np.concatenate(colors, axis=0)
-
-        return np.array([t, centerRadios]).T, colors
     
     def phase_agg_op(self):
         theta = self.totalPhaseTheta[self.lookIndex]
