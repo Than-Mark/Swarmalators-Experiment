@@ -54,18 +54,31 @@ sys.path.append("..")
 from swarmalatorlib.template import Swarmalators2D
 
 
-class DisWgtCouple(Swarmalators2D):
+class PatternFormation(Swarmalators2D):
     def __init__(self, strengthLambda: float, alpha: float, boundaryLength: float = 10, 
+                 productRateK0: float = 1, decayRateKd: float = 1, c0: float = 5, 
+                 chemotacticStrengthBetaR: float = 1, diffusionRateDc: float = 1, 
+                 epsilon: float = 10, cellNumInLine: int = 50, 
                  typeA: str = "distanceWgt", agentsNum: int=1000, dt: float=0.01, 
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 10, 
                  distribution: str = "uniform", randomSeed: int = 10, overWrite: bool = False) -> None:
-        assert distribution in ["uniform", "normal"]
-        assert typeA in ["heaviside", "distanceWgt"]
+        assert distribution in ["uniform"]
+        assert typeA in ["distanceWgt"]
 
         np.random.seed(randomSeed)
         self.positionX = np.random.random((agentsNum, 2)) * boundaryLength
         self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi - np.pi
+        self.c = np.random.rand(cellNumInLine, cellNumInLine)
+        self.cellNumInLine = cellNumInLine
+        self.cPosition = np.array(list(product(np.linspace(0, 10, cellNumInLine), repeat=2)))
+        self.dx = boundaryLength / cellNumInLine
         self.agentsNum = agentsNum
+        self.productRateK0 = productRateK0
+        self.decayRateKd = decayRateKd
+        self.diffusionRateDc = diffusionRateDc
+        self.chemotacticStrengthBetaR = chemotacticStrengthBetaR
+        self.c0 = c0
+        self.epsilon = epsilon
         self.dt = dt
         self.speedV = 3
         self.alpha = alpha
@@ -85,7 +98,6 @@ class DisWgtCouple(Swarmalators2D):
         self.strengthLambda = strengthLambda
         self.tqdm = tqdm
         self.savePath = savePath
-        self.temp = np.zeros(agentsNum)
         self.shotsnaps = shotsnaps
         self.counts = 0
         self.boundaryLength = boundaryLength
@@ -93,19 +105,28 @@ class DisWgtCouple(Swarmalators2D):
         self.randomSeed = randomSeed
         self.overWrite = overWrite
 
+        self.tempPointTheta = np.zeros(agentsNum)
+        self.tempPointC = np.zeros((cellNumInLine, cellNumInLine))
+        self.tempDistanceCX: np.ndarray = self.distance_x(self.deltaCX)
+
     def plot(self, ax: plt.Axes = None):
         if ax is None:
             _, ax = plt.subplots(figsize=(5, 5))
-        plt.quiver(
+        ax.quiver(
             self.positionX[:self.agentsNum // 2, 0], self.positionX[:self.agentsNum // 2, 1],
             np.cos(self.phaseTheta[:self.agentsNum // 2]), np.sin(self.phaseTheta[:self.agentsNum // 2]), color='tomato'
         )
-        plt.quiver(
+        ax.quiver(
             self.positionX[self.agentsNum // 2:, 0], self.positionX[self.agentsNum // 2:, 1],
             np.cos(self.phaseTheta[self.agentsNum // 2:]), np.sin(self.phaseTheta[self.agentsNum // 2:]), color='dodgerblue'
         )
-        plt.xlim(0, 10)
-        plt.ylim(0, 10)
+        ax.set_xlim(0, self.boundaryLength)
+        ax.set_ylim(0, self.boundaryLength)
+
+    def plot_field(self, ax: plt.Axes = None):
+        if ax is None:
+            _, ax = plt.subplots(figsize=(5, 5))
+        ax.contourf(self.c, cmap='viridis', levels=50)
 
     @property
     def A(self):
@@ -113,6 +134,62 @@ class DisWgtCouple(Swarmalators2D):
             return self.distance_x(self.deltaX) <= self.alpha
         elif self.typeA == "distanceWgt":
             return np.exp(-self.distance_x(self.deltaX) / self.alpha)
+
+    @property
+    def productC(self):
+        if self.typeA == "heaviside":
+            value = (self.tempDistanceCX <= self.alpha).mean(axis=0) * self.productRateK0
+        elif self.typeA == "distanceWgt":
+            value = np.exp(-self.tempDistanceCX / self.alpha).mean(axis=0) * self.productRateK0
+        return self._reshape_product_c(value, self.cellNumInLine)
+
+    @staticmethod
+    @nb.njit
+    def _reshape_product_c(cPosition: np.ndarray, cellNumInLine: int):
+        return np.reshape(cPosition, (cellNumInLine, cellNumInLine))
+
+    @property
+    def decayC(self):
+        return self.c * self.decayRateKd
+    
+    @property
+    def nabla2C(self):
+        center = -self.c
+        direct_neighbors = 0.20 * (
+            np.roll(self.c, 1, axis=0)
+            + np.roll(self.c, -1, axis=0)
+            + np.roll(self.c, 1, axis=1)
+            + np.roll(self.c, -1, axis=1)
+        )
+        diagonal_neighbors = 0.05 * (
+            np.roll(np.roll(self.c, 1, axis=0), 1, axis=1)
+            + np.roll(np.roll(self.c, -1, axis=0), 1, axis=1)
+            + np.roll(np.roll(self.c, -1, axis=0), -1, axis=1)
+            + np.roll(np.roll(self.c, 1, axis=0), -1, axis=1)
+        )
+
+        out_array = center + direct_neighbors + diagonal_neighbors
+        return out_array / (self.dx ** 2)
+    
+    @property
+    def nablaC(self):
+        return np.array([
+            (np.roll(self.c, 1, axis=1) - np.roll(self.c, -1, axis=1)) / (2 * self.dx), 
+            (np.roll(self.c, 1, axis=0) - np.roll(self.c, -1, axis=0)) / (2 * self.dx)
+        ]).transpose(1, 2, 0)
+
+    @property
+    def diffusionC(self):
+        return self.diffusionRateDc * self.nabla2C
+
+    @property
+    def growthLimitC(self):
+        return self.epsilon * (self.c0 - self.c) ** 3        
+
+    @property
+    def deltaCX(self):
+        return self._delta_x(self.cPosition, self.positionX[:, np.newaxis], 
+                             self.boundaryLength, self.halfBoundaryLength)
 
     @property
     def deltaX(self) -> np.ndarray:
@@ -131,18 +208,36 @@ class DisWgtCouple(Swarmalators2D):
         )
 
     @property
+    def chemotactic(self):
+        gradC = self.nablaC.reshape(-1, 2)
+        localGradC = gradC[self.tempDistanceCX.argmin(axis=1)]
+        return self.chemotacticStrengthBetaR * (
+            np.cos(self.phaseTheta) * localGradC[:, 1] - 
+            np.sin(self.phaseTheta) * localGradC[:, 0]
+        )
+
+    @property
     def pointTheta(self):
-        return self._pointTheta(self.phaseTheta, self.omegaTheta, self.strengthLambda, self.dt, self.A)
+        return self._pointTheta(self.phaseTheta, self.omegaTheta, self.chemotactic, 
+                                self.strengthLambda, self.A)
 
     @staticmethod
     @nb.njit
-    def _pointTheta(phaseTheta: np.ndarray, omegaTheta: np.ndarray, strengthLambda: float, 
-                    h: float, A: np.ndarray):
-        adjMatrixTheta = np.repeat(phaseTheta, phaseTheta.shape[0]).reshape(phaseTheta.shape[0], phaseTheta.shape[0])
-        k1 = omegaTheta + strengthLambda * np.sum(A * np.sin(
+    def _pointTheta(phaseTheta: np.ndarray, omegaTheta: np.ndarray, 
+                    chemotactic: np.ndarray, strengthLambda: float, 
+                    A: np.ndarray):
+        adjMatrixTheta = (
+            np.repeat(phaseTheta, phaseTheta.shape[0])
+            .reshape(phaseTheta.shape[0], phaseTheta.shape[0])
+        )
+        k1 = omegaTheta + chemotactic + strengthLambda * np.sum(A * np.sin(
             adjMatrixTheta - phaseTheta
         ), axis=0)
-        return k1 * h
+        return k1
+    
+    @property
+    def pointC(self):
+        return self.productC - self.decayC + self.diffusionC + self.growthLimitC
 
     def append(self):
         if self.store is not None:
@@ -150,14 +245,20 @@ class DisWgtCouple(Swarmalators2D):
                 return
             self.store.append(key="positionX", value=pd.DataFrame(self.positionX))
             self.store.append(key="phaseTheta", value=pd.DataFrame(self.phaseTheta))
-            self.store.append(key="pointTheta", value=pd.DataFrame(self.temp))
+            self.store.append(key="pointTheta", value=pd.DataFrame(self.tempPointTheta))
+            self.store.append(key="c", value=pd.DataFrame(self.c))
+            self.store.append(key="pointC", value=pd.DataFrame(self.tempPointC))
 
     def update(self):
+        self.tempDistanceCX = self.distance_x(self.deltaCX)
         self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta) * self.dt
         self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta) * self.dt
         self.positionX = np.mod(self.positionX, self.boundaryLength)
-        self.temp = self.pointTheta
-        self.phaseTheta += self.temp
+        self.tempPointTheta = self.pointTheta
+        self.tempPointC = self.pointC
+        self.phaseTheta += self.tempPointTheta * self.dt
+        self.c += self.tempPointC * self.dt
+        self.c[self.c < 0] = 0
         self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
 
     def __str__(self) -> str:
@@ -171,68 +272,8 @@ class DisWgtCouple(Swarmalators2D):
             self.store.close()
 
 
-class VariableParam(DisWgtCouple):
-    def __init__(self, strengthLambda: float, alpha: float, 
-                 lambdaArray: np.ndarray = None, alphaArray: np.ndarray = None,
-                 boundaryLength: float = 10, typeA: str = "distanceWgt", agentsNum: int=1000, dt: float=0.01, 
-                 tqdm: bool = False, savePath: str = None, shotsnaps: int = 10,
-                 distribution: str = "uniform", randomSeed: int = 10, overWrite: bool = False):
-        super().__init__(strengthLambda, alpha, boundaryLength, typeA, agentsNum, dt, tqdm, savePath, shotsnaps, distribution, randomSeed, overWrite)
-
-        if (lambdaArray is not None) & (alphaArray is not None):
-            raise ValueError("Adiabatic tuning can only be one-dimensional")
-        if lambdaArray is None:
-            lambdaArray = np.ones_like(alphaArray) * self.strengthLambda
-            self.diraction = f"Alpha.{alphaArray[0]:.2f}t{alphaArray[-1]:.2f}c{len(alphaArray)}"
-        elif alphaArray is None:
-            alphaArray = np.ones_like(lambdaArray) * self.distanceD0
-            self.diraction = f"StrengthLambda.{lambdaArray[0]:.3f}t{lambdaArray[-1]:.3f}c{len(lambdaArray)}"
-        else:
-            raise ValueError("lambdaArray and alphaArray cannot be None at the same time")
-        
-        self.lambdaArray = lambdaArray
-        self.alphaArray = alphaArray
-        self.oldName = self.get_old_name()
-        targetPath = f"./data/{self.oldName}.h5"
-        totalPositionX = pd.read_hdf(targetPath, key="positionX")
-        totalPhaseTheta = pd.read_hdf(targetPath, key="phaseTheta")
-
-        TNum = totalPositionX.shape[0] // self.agentsNum
-        totalPositionX = totalPositionX.values.reshape(TNum, self.agentsNum, 2)
-        totalPhaseTheta = totalPhaseTheta.values.reshape(TNum, self.agentsNum)
-        
-        self.positionX = totalPositionX[-1]
-        self.phaseTheta = totalPhaseTheta[-1]
-
-    def get_old_name(self) -> str:
-        return super().__str__()
-    
-    def __str__(self) -> str:
-        return self.oldName.replace("CorrectCoupling", f"CorrectCouplingAfter{self.diraction}")
-    
-    def run(self):
-
-        if not self.init_store():
-            return
-
-        TNum = self.lambdaArray.shape[0]
-        if self.tqdm:
-            iterRange = tqdm(range(TNum))
-        else:
-            iterRange = range(TNum)
-
-        for idx in iterRange:
-            self.strengthLambda = self.lambdaArray[idx]
-            self.alpha = self.alphaArray[idx]
-            self.update()
-            self.append()
-            self.counts = idx
-
-        self.close()
-
-
 class StateAnalysis:
-    def __init__(self, model: DisWgtCouple = None, classDistance: float = 2, 
+    def __init__(self, model: PatternFormation = None, classDistance: float = 2, 
                  lookIndex: int = -1, showTqdm: bool = False):
         
         self.classDistance = classDistance
@@ -376,8 +417,8 @@ class StateAnalysis:
             positionX[oscis, 0], positionX[oscis, 1],
             np.cos(phaseTheta[oscis]), np.sin(phaseTheta[oscis]), **kwargs
         )
-        ax.set_xlim(0, 10)
-        ax.set_ylim(0, 10)    
+        ax.set_xlim(0, self.model.boundaryLength)
+        ax.set_ylim(0, self.model.boundaryLength)    
 
     def plot_centers(self, ax: plt.Axes = None, index: int = -1):
         positionX, phaseTheta, pointTheta = self.get_state(index)
@@ -412,34 +453,3 @@ class StateAnalysis:
             _, phaseTheta, _ = state
 
         return np.abs(np.sum(np.exp(1j * phaseTheta))) / phaseTheta.size
-    
-    def tv_center_position(self, step: int = 30):
-        color = ["red"] * 500 + ["blue"] * 500
-
-        t = []
-        positionX = []
-        positionY = []
-        colors = []
-
-        if self.showTqdm:
-            iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
-        else:
-            iterObject = range(1, self.totalPhaseTheta.shape[0])
-
-        for i in iterObject:
-            if i % step != 0:
-                continue
-            self.lookIndex = i
-
-            centers = self.centers
-            t.append(np.ones(self.model.agentsNum) * i)
-            positionX.append(centers[:, 0])
-            positionY.append(centers[:, 1])
-            colors.append(color)
-
-        t = np.concatenate(t, axis=0)
-        positionX = np.concatenate(positionX, axis=0)
-        positionY = np.concatenate(positionY, axis=0)
-        colors = np.concatenate(colors, axis=0)
-
-        return np.array([t, positionX, positionY]).T, colors
