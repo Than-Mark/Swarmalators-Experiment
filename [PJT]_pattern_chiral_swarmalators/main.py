@@ -263,7 +263,11 @@ class PatternFormation(Swarmalators2D):
 
     def __str__(self) -> str:
         
-        name =  f"CorrectCoupling_{self.distribution}_{self.strengthLambda:.3f}_{self.alpha:.2f}_{self.randomSeed}"
+        name =  (
+            f"PF_{self.strengthLambda:.3f}_{self.alpha:.2f}"
+            f"_{self.chemotacticStrengthBetaR:.1f}"
+            f"_{self.randomSeed}"
+        )
         
         return name
 
