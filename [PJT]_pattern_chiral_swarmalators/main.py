@@ -264,9 +264,9 @@ class PatternFormation(Swarmalators2D):
     def __str__(self) -> str:
         
         name =  (
-            f"PF_{self.strengthLambda:.3f}_{self.alpha:.2f}"
-            f"_{self.chemotacticStrengthBetaR:.1f}"
-            f"_{self.randomSeed}"
+            f"PF_K{self.strengthLambda:.3f}_a{self.alpha:.2f}"
+            f"_b{self.chemotacticStrengthBetaR:.1f}"
+            f"_r{self.randomSeed}"
         )
         
         return name
@@ -274,6 +274,165 @@ class PatternFormation(Swarmalators2D):
     def close(self):
         if self.store is not None:
             self.store.close()
+
+
+class GSPatternFormation(PatternFormation):
+    def __init__(self, strengthLambda: float, alpha: float, boundaryLength: float = 10, 
+                 productRateK0: float = 1, decayRateKd: float = 1, c0: float = 5, 
+                 chemotacticStrengthBetaR: float = 1, diffusionRateDc: float = 1, 
+                 epsilon: float = 10, cellNumInLine: int = 50, 
+                 typeA: str = "distanceWgt", agentsNum: int=1000, dt: float=0.01, 
+                 tqdm: bool = False, savePath: str = None, shotsnaps: int = 10, 
+                 distribution: str = "uniform", randomSeed: int = 10, overWrite: bool = False) -> None:
+        
+        super().__init__(
+            strengthLambda, alpha, boundaryLength, productRateK0, decayRateKd, c0, 
+            chemotacticStrengthBetaR, diffusionRateDc, epsilon, cellNumInLine, typeA, 
+            agentsNum, dt, tqdm, savePath, shotsnaps, distribution, randomSeed, overWrite
+        )
+        self.halfAgentsNum = agentsNum // 2
+        self.u = np.random.rand(cellNumInLine, cellNumInLine)
+        self.v = np.random.rand(cellNumInLine, cellNumInLine)
+        
+    @property
+    def nablaU(self):
+        return np.array([
+            (np.roll(self.u, 1, axis=1) - np.roll(self.u, -1, axis=1)) / (2 * self.dx), 
+            (np.roll(self.u, 1, axis=0) - np.roll(self.u, -1, axis=0)) / (2 * self.dx)
+        ]).transpose(1, 2, 0)
+    
+    @property
+    def nablaV(self):
+        return np.array([
+            (np.roll(self.v, 1, axis=1) - np.roll(self.v, -1, axis=1)) / (2 * self.dx), 
+            (np.roll(self.v, 1, axis=0) - np.roll(self.v, -1, axis=0)) / (2 * self.dx)
+        ]).transpose(1, 2, 0)
+
+    @property
+    def productU(self):
+        if self.typeA == "heaviside":
+            value = (self.tempDistanceCX <= self.alpha)[:self.halfAgentsNum].mean(axis=0) * self.productRateK0
+        elif self.typeA == "distanceWgt":
+            value = np.exp(-self.tempDistanceCX / self.alpha)[:self.halfAgentsNum].mean(axis=0) * self.productRateK0
+        return self._reshape_product_c(value, self.cellNumInLine)
+    
+    @property
+    def productV(self):
+        if self.typeA == "heaviside":
+            value = (self.tempDistanceCX <= self.alpha)[self.halfAgentsNum:].mean(axis=0) * self.productRateK0
+        elif self.typeA == "distanceWgt":
+            value = np.exp(-self.tempDistanceCX / self.alpha)[self.halfAgentsNum:].mean(axis=0) * self.productRateK0
+        return self._reshape_product_c(value, self.cellNumInLine)
+
+    @property
+    def chemotactic(self):
+        gradUV = (self.nablaC + self.nablaV).reshape(-1, 2)
+        localGradC = gradUV[self.tempDistanceCX.argmin(axis=1)]
+        return self.chemotacticStrengthBetaR * (
+            np.cos(self.phaseTheta) * localGradC[:, 1] - 
+            np.sin(self.phaseTheta) * localGradC[:, 0]
+        )
+    
+    @property
+    def nabla2U(self):
+        center = -self.u
+        direct_neighbors = 0.20 * (
+            np.roll(self.u, 1, axis=0)
+            + np.roll(self.u, -1, axis=0)
+            + np.roll(self.u, 1, axis=1)
+            + np.roll(self.u, -1, axis=1)
+        )
+        diagonal_neighbors = 0.05 * (
+            np.roll(np.roll(self.u, 1, axis=0), 1, axis=1)
+            + np.roll(np.roll(self.u, -1, axis=0), 1, axis=1)
+            + np.roll(np.roll(self.u, -1, axis=0), -1, axis=1)
+            + np.roll(np.roll(self.u, 1, axis=0), -1, axis=1)
+        )
+
+        out_array = center + direct_neighbors + diagonal_neighbors
+        return out_array / (self.dx ** 2)
+    
+    @property
+    def nabla2V(self):
+        center = -self.v
+        direct_neighbors = 0.20 * (
+            np.roll(self.v, 1, axis=0)
+            + np.roll(self.v, -1, axis=0)
+            + np.roll(self.v, 1, axis=1)
+            + np.roll(self.v, -1, axis=1)
+        )
+        diagonal_neighbors = 0.05 * (
+            np.roll(np.roll(self.v, 1, axis=0), 1, axis=1)
+            + np.roll(np.roll(self.v, -1, axis=0), 1, axis=1)
+            + np.roll(np.roll(self.v, -1, axis=0), -1, axis=1)
+            + np.roll(np.roll(self.v, 1, axis=0), -1, axis=1)
+        )
+
+        out_array = center + direct_neighbors + diagonal_neighbors
+        return out_array / (self.dx ** 2)
+    
+    @property
+    def diffusionU(self):
+        return self.diffusionRateDc * self.nabla2U
+    
+    @property
+    def diffusionV(self):
+        return self.diffusionRateDc * self.nabla2V
+    
+    @property
+    def pointU(self):
+        return (
+            self.productU 
+            - self.u * self.v ** 2 
+            - self.u * self.decayRateKd 
+            + self.diffusionU
+            + self.epsilon * (self.c0 - self.u) ** 3
+        )
+    
+    @property
+    def pointV(self):
+        return (
+            self.productV 
+            + self.u * self.v ** 2 
+            - self.v * self.decayRateKd 
+            + self.diffusionV
+            + self.epsilon * (self.c0 - self.v) ** 3
+        )
+
+    def update(self):
+        self.tempDistanceCX = self.distance_x(self.deltaCX)
+        self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta) * self.dt
+        self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta) * self.dt
+        self.positionX = np.mod(self.positionX, self.boundaryLength)
+        self.tempPointTheta = self.pointTheta
+        self.tempPointU = self.pointU
+        self.tempPointV = self.pointV
+        self.phaseTheta += self.tempPointTheta * self.dt
+        self.u += self.tempPointU * self.dt
+        self.v += self.tempPointV * self.dt
+        self.u[self.u < 0] = 0
+        self.v[self.v < 0] = 0
+        self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
+
+    def append(self):
+        if self.store is not None:
+            if self.counts % self.shotsnaps != 0:
+                return
+            self.store.append(key="positionX", value=pd.DataFrame(self.positionX))
+            self.store.append(key="phaseTheta", value=pd.DataFrame(self.phaseTheta))
+            self.store.append(key="pointTheta", value=pd.DataFrame(self.tempPointTheta))
+            self.store.append(key="u", value=pd.DataFrame(self.u))
+            self.store.append(key="v", value=pd.DataFrame(self.v))
+
+    def __str__(self) -> str:
+            
+            name =  (
+                f"GSPF_K{self.strengthLambda:.3f}_a{self.alpha:.2f}"
+                f"_b{self.chemotacticStrengthBetaR:.1f}"
+                f"_r{self.randomSeed}"
+            )
+            
+            return name
 
 
 class StateAnalysis:
