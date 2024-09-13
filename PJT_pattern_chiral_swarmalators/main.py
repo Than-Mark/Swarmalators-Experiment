@@ -70,7 +70,7 @@ class PatternFormation(Swarmalators2D):
         self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi - np.pi
         self.c = np.random.rand(cellNumInLine, cellNumInLine)
         self.cellNumInLine = cellNumInLine
-        self.cPosition = np.array(list(product(np.linspace(0, 10, cellNumInLine), repeat=2)))
+        self.cPosition = np.array(list(product(np.linspace(0, boundaryLength, cellNumInLine), repeat=2)))
         self.dx = boundaryLength / cellNumInLine
         self.agentsNum = agentsNum
         self.productRateK0 = productRateK0
