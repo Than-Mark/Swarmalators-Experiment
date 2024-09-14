@@ -326,7 +326,7 @@ class GSPatternFormation(PatternFormation):
 
     @property
     def chemotactic(self):
-        gradUV = (self.nablaC + self.nablaV).reshape(-1, 2)
+        gradUV = (self.nablaU + self.nablaV).reshape(-1, 2)
         localGradC = gradUV[self.tempDistanceCX.argmin(axis=1)]
         return self.chemotacticStrengthBetaR * (
             np.cos(self.phaseTheta) * localGradC[:, 1] - 
