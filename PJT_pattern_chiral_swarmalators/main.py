@@ -71,7 +71,7 @@ class PatternFormation(Swarmalators2D):
         self.c = np.random.rand(cellNumInLine, cellNumInLine)
         self.cellNumInLine = cellNumInLine
         self.cPosition = np.array(list(product(np.linspace(0, boundaryLength, cellNumInLine), repeat=2)))
-        self.dx = boundaryLength / cellNumInLine
+        self.dx = boundaryLength / (cellNumInLine - 1)
         self.agentsNum = agentsNum
         self.productRateK0 = productRateK0
         self.decayRateKd = decayRateKd
@@ -201,10 +201,10 @@ class PatternFormation(Swarmalators2D):
     def _delta_x(positionX: np.ndarray, others: np.ndarray,
                  boundaryLength: float, halfBoundaryLength: float) -> np.ndarray:
         subX = positionX - others
-        return positionX - (
-            others * (-halfBoundaryLength <= subX) * (subX <= halfBoundaryLength) + 
-            (others - boundaryLength) * (subX < -halfBoundaryLength) + 
-            (others + boundaryLength) * (subX > halfBoundaryLength)
+        return (
+            subX * (-halfBoundaryLength <= subX) * (subX <= halfBoundaryLength) +
+            (subX + boundaryLength) * (subX < -halfBoundaryLength) +
+            (subX - boundaryLength) * (subX > halfBoundaryLength)
         )
 
     @property
@@ -279,17 +279,19 @@ class PatternFormation(Swarmalators2D):
 class GSPatternFormation(PatternFormation):
     def __init__(self, strengthLambda: float, alpha: float, boundaryLength: float = 10, 
                  productRateK0: float = 1, decayRateKd: float = 1, c0: float = 5, 
-                 chemotacticStrengthBetaR: float = 1, diffusionRateDc: float = 1, 
-                 epsilon: float = 10, cellNumInLine: int = 50, 
+                 chemoBetaU: float = 1, chemoBetaV: float = 1, 
+                 diffusionRateDc: float = 1, epsilon: float = 10, cellNumInLine: int = 50, 
                  typeA: str = "distanceWgt", agentsNum: int=1000, dt: float=0.01, 
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 10, 
                  distribution: str = "uniform", randomSeed: int = 10, overWrite: bool = False) -> None:
         
         super().__init__(
             strengthLambda, alpha, boundaryLength, productRateK0, decayRateKd, c0, 
-            chemotacticStrengthBetaR, diffusionRateDc, epsilon, cellNumInLine, typeA, 
+            0, diffusionRateDc, epsilon, cellNumInLine, typeA, 
             agentsNum, dt, tqdm, savePath, shotsnaps, distribution, randomSeed, overWrite
         )
+        self.chemoBetaU = chemoBetaU
+        self.chemoBetaV = chemoBetaV
         self.halfAgentsNum = agentsNum // 2
         self.u = np.random.rand(cellNumInLine, cellNumInLine)
         self.v = np.random.rand(cellNumInLine, cellNumInLine)
@@ -326,11 +328,15 @@ class GSPatternFormation(PatternFormation):
 
     @property
     def chemotactic(self):
-        gradUV = (self.nablaU + self.nablaV).reshape(-1, 2)
-        localGradC = gradUV[self.tempDistanceCX.argmin(axis=1)]
-        return self.chemotacticStrengthBetaR * (
-            np.cos(self.phaseTheta) * localGradC[:, 1] - 
-            np.sin(self.phaseTheta) * localGradC[:, 0]
+        idxs = (self.positionX / self.dx).round().astype(int)
+        localGradU = self.nablaU[idxs[:, 0], idxs[:, 1]]
+        localGradV = self.nablaV[idxs[:, 0], idxs[:, 1]]
+        return self.chemoBetaU * (
+            np.cos(self.phaseTheta) * localGradU[:, 1] - 
+            np.sin(self.phaseTheta) * localGradU[:, 0]
+        ) + self.chemoBetaV * (
+            np.cos(self.phaseTheta) * localGradV[:, 1] -
+            np.sin(self.phaseTheta) * localGradV[:, 0]
         )
     
     @property
