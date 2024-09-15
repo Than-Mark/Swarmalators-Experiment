@@ -105,9 +105,12 @@ class PatternFormation(Swarmalators2D):
         self.randomSeed = randomSeed
         self.overWrite = overWrite
 
-        self.tempPointTheta = np.zeros(agentsNum)
-        self.tempPointC = np.zeros((cellNumInLine, cellNumInLine))
-        self.tempDistanceCX: np.ndarray = self.distance_x(self.deltaCX)
+        self.temp = dict()
+        # The order of variable definitions has a dependency relationship
+        self.temp["direction"] = self._direction(self.phaseTheta)
+        self.temp["CXDistanceWgtA"] = self._distance_wgt_A(self.distance_x(self.deltaCX), self.alpha)
+        self.temp["dotTheta"] = self.dotTheta
+        self.temp["dotC"] = self.pointC
 
     def plot(self, ax: plt.Axes = None):
         if ax is None:
@@ -128,19 +131,32 @@ class PatternFormation(Swarmalators2D):
             _, ax = plt.subplots(figsize=(5, 5))
         ax.contourf(self.c, cmap='viridis', levels=50)
 
+    @staticmethod
+    @nb.njit
+    def _distance_wgt_A(distance: np.ndarray, alpha: float):
+        return np.exp(-distance / alpha)
+
     @property
     def A(self):
         if self.typeA == "heaviside":
             return self.distance_x(self.deltaX) <= self.alpha
         elif self.typeA == "distanceWgt":
-            return np.exp(-self.distance_x(self.deltaX) / self.alpha)
+            return self._distance_wgt_A(self.distance_x(self.deltaX), self.alpha)
+
+    @staticmethod
+    @nb.njit
+    def _distance_wgt_product_c(distance_wgt_A: np.ndarray, productRateK0: float):
+        return distance_wgt_A.sum(axis=0) / distance_wgt_A.shape[0] * productRateK0
 
     @property
     def productC(self):
         if self.typeA == "heaviside":
-            value = (self.tempDistanceCX <= self.alpha).mean(axis=0) * self.productRateK0
+            value = (self.distance_x(self.deltaCX) <= self.alpha).mean(axis=0) * self.productRateK0
         elif self.typeA == "distanceWgt":
-            value = np.exp(-self.tempDistanceCX / self.alpha).mean(axis=0) * self.productRateK0
+            value = self._distance_wgt_product_c(
+                self._distance_wgt_A(self.temp["CXDistanceWgtA"], self.alpha), 
+                self.productRateK0
+            )
         return self._reshape_product_c(value, self.cellNumInLine)
 
     @staticmethod
@@ -209,32 +225,31 @@ class PatternFormation(Swarmalators2D):
 
     @property
     def chemotactic(self):
-        gradC = self.nablaC.reshape(-1, 2)
-        localGradC = gradC[self.tempDistanceCX.argmin(axis=1)]
+        idxs = (self.positionX / self.dx).round().astype(int)
+        localGradC = self.nablaC[idxs[:, 0], idxs[:, 1]]
         return self.chemotacticStrengthBetaR * (
-            np.cos(self.phaseTheta) * localGradC[:, 1] - 
-            np.sin(self.phaseTheta) * localGradC[:, 0]
+            self.temp["direction"][:, 0] * localGradC[:, 1] -
+            self.temp["direction"][:, 1] * localGradC[:, 0]
         )
 
     @property
-    def pointTheta(self):
-        return self._pointTheta(self.phaseTheta, self.omegaTheta, self.chemotactic, 
-                                self.strengthLambda, self.A)
+    def dotTheta(self):
+        return self._dotTheta(self.phaseTheta, self.omegaTheta, self.chemotactic, 
+                              self.strengthLambda, self.A)
 
     @staticmethod
     @nb.njit
-    def _pointTheta(phaseTheta: np.ndarray, omegaTheta: np.ndarray, 
+    def _dotTheta(phaseTheta: np.ndarray, omegaTheta: np.ndarray, 
                     chemotactic: np.ndarray, strengthLambda: float, 
                     A: np.ndarray):
         adjMatrixTheta = (
             np.repeat(phaseTheta, phaseTheta.shape[0])
             .reshape(phaseTheta.shape[0], phaseTheta.shape[0])
         )
-        k1 = omegaTheta + chemotactic + strengthLambda * np.sum(A * np.sin(
+        return omegaTheta + chemotactic + strengthLambda * np.sum(A * np.sin(
             adjMatrixTheta - phaseTheta
         ), axis=0)
-        return k1
-    
+        
     @property
     def pointC(self):
         return self.productC - self.decayC + self.diffusionC + self.growthLimitC
@@ -245,19 +260,28 @@ class PatternFormation(Swarmalators2D):
                 return
             self.store.append(key="positionX", value=pd.DataFrame(self.positionX))
             self.store.append(key="phaseTheta", value=pd.DataFrame(self.phaseTheta))
-            self.store.append(key="pointTheta", value=pd.DataFrame(self.tempPointTheta))
+            self.store.append(key="dotTheta", value=pd.DataFrame(self.temp["dotTheta"]))
             self.store.append(key="c", value=pd.DataFrame(self.c))
-            self.store.append(key="pointC", value=pd.DataFrame(self.tempPointC))
+            self.store.append(key="dotC", value=pd.DataFrame(self.temp["dotC"]))
+
+    @staticmethod
+    @nb.njit
+    def _direction(phaseTheta: np.ndarray) -> np.ndarray:
+        direction = np.zeros((phaseTheta.shape[0], 2))
+        direction[:, 0] = np.cos(phaseTheta)
+        direction[:, 1] = np.sin(phaseTheta)
+        return direction
 
     def update(self):
-        self.tempDistanceCX = self.distance_x(self.deltaCX)
-        self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta) * self.dt
-        self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta) * self.dt
+        # The order of variable definitions has a dependency relationship
+        self.temp["CXDistanceWgtA"] = self._distance_wgt_A(self.distance_x(self.deltaCX), self.alpha)
+        self.temp["dotTheta"] = self.dotTheta
+        self.temp["dotC"] = self.pointC
+        self.temp["direction"] = self._direction(self.phaseTheta)
+        self.positionX += self.speedV * self.temp["direction"] * self.dt
         self.positionX = np.mod(self.positionX, self.boundaryLength)
-        self.tempPointTheta = self.pointTheta
-        self.tempPointC = self.pointC
-        self.phaseTheta += self.tempPointTheta * self.dt
-        self.c += self.tempPointC * self.dt
+        self.phaseTheta += self.temp["dotTheta"] * self.dt
+        self.c += self.temp["dotC"] * self.dt
         self.c[self.c < 0] = 0
         self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
 
@@ -284,17 +308,61 @@ class GSPatternFormation(PatternFormation):
                  typeA: str = "distanceWgt", agentsNum: int=1000, dt: float=0.01, 
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 10, 
                  distribution: str = "uniform", randomSeed: int = 10, overWrite: bool = False) -> None:
-        
-        super().__init__(
-            strengthLambda, alpha, boundaryLength, productRateK0, decayRateKd, c0, 
-            0, diffusionRateDc, epsilon, cellNumInLine, typeA, 
-            agentsNum, dt, tqdm, savePath, shotsnaps, distribution, randomSeed, overWrite
-        )
+        self.u = np.random.rand(cellNumInLine, cellNumInLine)
+        self.v = np.random.rand(cellNumInLine, cellNumInLine)
         self.chemoBetaU = chemoBetaU
         self.chemoBetaV = chemoBetaV
         self.halfAgentsNum = agentsNum // 2
-        self.u = np.random.rand(cellNumInLine, cellNumInLine)
-        self.v = np.random.rand(cellNumInLine, cellNumInLine)
+
+        assert distribution in ["uniform"]
+        assert typeA in ["distanceWgt"]
+
+        np.random.seed(randomSeed)
+        self.positionX = np.random.random((agentsNum, 2)) * boundaryLength
+        self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi - np.pi
+        self.c = np.random.rand(cellNumInLine, cellNumInLine)
+        self.cellNumInLine = cellNumInLine
+        self.cPosition = np.array(list(product(np.linspace(0, boundaryLength, cellNumInLine), repeat=2)))
+        self.dx = boundaryLength / (cellNumInLine - 1)
+        self.agentsNum = agentsNum
+        self.productRateK0 = productRateK0
+        self.decayRateKd = decayRateKd
+        self.diffusionRateDc = diffusionRateDc
+        self.c0 = c0
+        self.epsilon = epsilon
+        self.dt = dt
+        self.speedV = 3
+        self.alpha = alpha
+        if distribution == "uniform":
+            self.omegaTheta = np.concatenate([
+                np.random.uniform(1, 3, size=agentsNum // 2),
+                np.random.uniform(-3, -1, size=agentsNum // 2)
+            ])
+        elif distribution == "normal":
+            self.omegaTheta = np.concatenate([
+                np.random.normal(loc=3, scale=0.5, size=agentsNum // 2),
+                np.random.normal(loc=-3, scale=0.5, size=agentsNum // 2)
+            ])
+
+        self.typeA = typeA
+        self.distribution = distribution
+        self.strengthLambda = strengthLambda
+        self.tqdm = tqdm
+        self.savePath = savePath
+        self.shotsnaps = shotsnaps
+        self.counts = 0
+        self.boundaryLength = boundaryLength
+        self.halfBoundaryLength = boundaryLength / 2
+        self.randomSeed = randomSeed
+        self.overWrite = overWrite
+
+        self.temp = dict()
+        # The order of variable definitions has a dependency relationship
+        self.temp["direction"] = self._direction(self.phaseTheta)
+        self.temp["CXDistanceWgtA"] = self._distance_wgt_A(self.distance_x(self.deltaCX), self.alpha)
+        self.temp["ocsiIdx"] = (self.positionX / self.dx).round().astype(int)
+        self.temp["dotTheta"] = self.dotTheta
+        self.temp["dotC"] = self.pointC
         
     @property
     def nablaU(self):
@@ -310,33 +378,34 @@ class GSPatternFormation(PatternFormation):
             (np.roll(self.v, 1, axis=0) - np.roll(self.v, -1, axis=0)) / (2 * self.dx)
         ]).transpose(1, 2, 0)
 
+    @staticmethod
+    @nb.njit
+    def _product_c(cellNumInLine: int, ocsiIdx: np.ndarray):
+        productC = np.zeros((cellNumInLine, cellNumInLine), dtype=np.float64)
+        for idx in ocsiIdx:
+            productC[idx[0], idx[1]] = productC[idx[0], idx[1]] + 1
+        return productC
+
     @property
     def productU(self):
-        if self.typeA == "heaviside":
-            value = (self.tempDistanceCX <= self.alpha)[:self.halfAgentsNum].mean(axis=0) * self.productRateK0
-        elif self.typeA == "distanceWgt":
-            value = np.exp(-self.tempDistanceCX / self.alpha)[:self.halfAgentsNum].mean(axis=0) * self.productRateK0
+        value = self._product_c(self.cellNumInLine, self.temp["ocsiIdx"][:self.halfAgentsNum])
         return self._reshape_product_c(value, self.cellNumInLine)
     
     @property
     def productV(self):
-        if self.typeA == "heaviside":
-            value = (self.tempDistanceCX <= self.alpha)[self.halfAgentsNum:].mean(axis=0) * self.productRateK0
-        elif self.typeA == "distanceWgt":
-            value = np.exp(-self.tempDistanceCX / self.alpha)[self.halfAgentsNum:].mean(axis=0) * self.productRateK0
+        value = self._product_c(self.cellNumInLine, self.temp["ocsiIdx"][self.halfAgentsNum:])
         return self._reshape_product_c(value, self.cellNumInLine)
 
     @property
     def chemotactic(self):
-        idxs = (self.positionX / self.dx).round().astype(int)
-        localGradU = self.nablaU[idxs[:, 0], idxs[:, 1]]
-        localGradV = self.nablaV[idxs[:, 0], idxs[:, 1]]
+        localGradU = self.nablaU[self.temp["ocsiIdx"][:, 0], self.temp["ocsiIdx"][:, 1]]
+        localGradV = self.nablaV[self.temp["ocsiIdx"][:, 0], self.temp["ocsiIdx"][:, 1]]
         return self.chemoBetaU * (
-            np.cos(self.phaseTheta) * localGradU[:, 1] - 
-            np.sin(self.phaseTheta) * localGradU[:, 0]
+            self.temp["direction"][:, 0] * localGradU[:, 1] - 
+            self.temp["direction"][:, 1] * localGradU[:, 0]
         ) + self.chemoBetaV * (
-            np.cos(self.phaseTheta) * localGradV[:, 1] -
-            np.sin(self.phaseTheta) * localGradV[:, 0]
+            self.temp["direction"][:, 0] * localGradV[:, 1] -
+            self.temp["direction"][:, 1] * localGradV[:, 0]
         )
     
     @property
@@ -386,7 +455,7 @@ class GSPatternFormation(PatternFormation):
         return self.diffusionRateDc * self.nabla2V
     
     @property
-    def pointU(self):
+    def dotU(self):
         return (
             self.productU 
             - self.u * self.v ** 2 
@@ -396,7 +465,7 @@ class GSPatternFormation(PatternFormation):
         )
     
     @property
-    def pointV(self):
+    def dotV(self):
         return (
             self.productV 
             + self.u * self.v ** 2 
@@ -406,19 +475,21 @@ class GSPatternFormation(PatternFormation):
         )
 
     def update(self):
-        self.tempDistanceCX = self.distance_x(self.deltaCX)
-        self.positionX[:, 0] += self.speedV * np.cos(self.phaseTheta) * self.dt
-        self.positionX[:, 1] += self.speedV * np.sin(self.phaseTheta) * self.dt
-        self.positionX = np.mod(self.positionX, self.boundaryLength)
-        self.tempPointTheta = self.pointTheta
-        self.tempPointU = self.pointU
-        self.tempPointV = self.pointV
-        self.phaseTheta += self.tempPointTheta * self.dt
-        self.u += self.tempPointU * self.dt
-        self.v += self.tempPointV * self.dt
+        self.temp["CXDistanceWgtA"] = self._distance_wgt_A(self.distance_x(self.deltaCX), self.alpha)
+        self.temp["ocsiIdx"] = (self.positionX / self.dx).round().astype(int)
+        self.temp["dotTheta"] = self.dotTheta
+        self.temp["dotU"] = self.dotU
+        self.temp["dotV"] = self.dotV
+        self.positionX = np.mod(
+            self.positionX + self.speedV * self.temp["direction"] * self.dt, 
+            self.boundaryLength
+        )
+        self.phaseTheta += self.temp["dotTheta"] * self.dt
+        self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
+        self.u += self.temp["dotU"] * self.dt
+        self.v += self.temp["dotV"] * self.dt
         self.u[self.u < 0] = 0
         self.v[self.v < 0] = 0
-        self.phaseTheta = np.mod(self.phaseTheta + np.pi, 2 * np.pi) - np.pi
 
     def append(self):
         if self.store is not None:
@@ -426,7 +497,7 @@ class GSPatternFormation(PatternFormation):
                 return
             self.store.append(key="positionX", value=pd.DataFrame(self.positionX))
             self.store.append(key="phaseTheta", value=pd.DataFrame(self.phaseTheta))
-            self.store.append(key="pointTheta", value=pd.DataFrame(self.tempPointTheta))
+            self.store.append(key="dotTheta", value=pd.DataFrame(self.temp["dotTheta"]))
             self.store.append(key="u", value=pd.DataFrame(self.u))
             self.store.append(key="v", value=pd.DataFrame(self.v))
 
@@ -454,13 +525,13 @@ class StateAnalysis:
             targetPath = f"{self.model.savePath}/{self.model}.h5"
             totalPositionX = pd.read_hdf(targetPath, key="positionX")
             totalPhaseTheta = pd.read_hdf(targetPath, key="phaseTheta")
-            totalPointTheta = pd.read_hdf(targetPath, key="pointTheta")
+            totalDotTheta = pd.read_hdf(targetPath, key="dotTheta")
             
             TNum = totalPositionX.shape[0] // self.model.agentsNum
             self.TNum = TNum
             self.totalPositionX = totalPositionX.values.reshape(TNum, self.model.agentsNum, 2)
             self.totalPhaseTheta = totalPhaseTheta.values.reshape(TNum, self.model.agentsNum)
-            self.totalPointTheta = totalPointTheta.values.reshape(TNum, self.model.agentsNum)
+            self.totalDotTheta = totalDotTheta.values.reshape(TNum, self.model.agentsNum)
 
             if self.showTqdm:
                 self.iterObject = tqdm(range(1, self.totalPhaseTheta.shape[0]))
@@ -470,26 +541,26 @@ class StateAnalysis:
     def get_state(self, index: int = -1):
         positionX = self.totalPositionX[index]
         phaseTheta = self.totalPhaseTheta[index]
-        pointTheta = self.totalPointTheta[index]
+        dotTheta = self.totalDotTheta[index]
 
-        return positionX, phaseTheta, pointTheta
+        return positionX, phaseTheta, dotTheta
 
     @staticmethod
     @nb.njit
-    def _calc_centers(positionX, phaseTheta, pointTheta, speedV, dt):
+    def _calc_centers(positionX, phaseTheta, dotTheta, speedV, dt):
         centers = np.zeros((positionX.shape[0], 2))
-        centers[:, 0] = positionX[:, 0] - speedV * dt / pointTheta * np.sin(phaseTheta)
-        centers[:, 1] = positionX[:, 1] + speedV * dt / pointTheta * np.cos(phaseTheta)
+        centers[:, 0] = positionX[:, 0] - speedV * dt / dotTheta * np.sin(phaseTheta)
+        centers[:, 1] = positionX[:, 1] + speedV * dt / dotTheta * np.cos(phaseTheta)
 
         return centers
 
     @property
     def centers(self):
         
-        lastPositionX, lastPhaseTheta, lastPointTheta = self.get_state(self.lookIndex)
+        lastPositionX, lastPhaseTheta, lastDotTheta = self.get_state(self.lookIndex)
         
         centers = self._calc_centers(
-            lastPositionX, lastPhaseTheta, lastPointTheta, self.model.speedV, self.model.dt
+            lastPositionX, lastPhaseTheta, lastDotTheta, self.model.speedV, self.model.dt
         )
 
         return np.mod(centers, self.model.boundaryLength)
@@ -497,10 +568,10 @@ class StateAnalysis:
     @property
     def centersNoMod(self):
             
-        lastPositionX, lastPhaseTheta, lastPointTheta = self.get_state(self.lookIndex)
+        lastPositionX, lastPhaseTheta, lastDotTheta = self.get_state(self.lookIndex)
         
         centers = self._calc_centers(
-            lastPositionX, lastPhaseTheta, lastPointTheta, self.model.speedV, self.model.dt
+            lastPositionX, lastPhaseTheta, lastDotTheta, self.model.speedV, self.model.dt
         )
 
         return centers
@@ -575,7 +646,7 @@ class StateAnalysis:
         return {i + 1: classes[i] for i in range(len(classes))}, centers
 
     def plot_spatial(self, ax: plt.Axes = None, oscis: np.ndarray = None, index: int = -1, **kwargs):
-        positionX, phaseTheta, pointTheta = self.get_state(index)
+        positionX, phaseTheta, _ = self.get_state(index)
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(6, 6))
@@ -590,7 +661,7 @@ class StateAnalysis:
         ax.set_ylim(0, self.model.boundaryLength)    
 
     def plot_centers(self, ax: plt.Axes = None, index: int = -1):
-        positionX, phaseTheta, pointTheta = self.get_state(index)
+        positionX, phaseTheta, _ = self.get_state(index)
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(6, 6))
