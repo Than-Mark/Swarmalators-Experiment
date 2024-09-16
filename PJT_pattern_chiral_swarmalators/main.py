@@ -110,7 +110,7 @@ class PatternFormation(Swarmalators2D):
         self.temp["direction"] = self._direction(self.phaseTheta)
         self.temp["CXDistanceWgtA"] = self._distance_wgt_A(self.distance_x(self.deltaCX), self.alpha)
         self.temp["dotTheta"] = self.dotTheta
-        self.temp["dotC"] = self.pointC
+        self.temp["dotC"] = self.dotC
 
     def plot(self, ax: plt.Axes = None):
         if ax is None:
@@ -251,7 +251,7 @@ class PatternFormation(Swarmalators2D):
         ), axis=0)
         
     @property
-    def pointC(self):
+    def dotC(self):
         return self.productC - self.decayC + self.diffusionC + self.growthLimitC
 
     def append(self):
@@ -276,7 +276,7 @@ class PatternFormation(Swarmalators2D):
         # The order of variable definitions has a dependency relationship
         self.temp["CXDistanceWgtA"] = self._distance_wgt_A(self.distance_x(self.deltaCX), self.alpha)
         self.temp["dotTheta"] = self.dotTheta
-        self.temp["dotC"] = self.pointC
+        self.temp["dotC"] = self.dotC
         self.temp["direction"] = self._direction(self.phaseTheta)
         self.positionX += self.speedV * self.temp["direction"] * self.dt
         self.positionX = np.mod(self.positionX, self.boundaryLength)
@@ -359,11 +359,11 @@ class GSPatternFormation(PatternFormation):
         self.temp = dict()
         # The order of variable definitions has a dependency relationship
         self.temp["direction"] = self._direction(self.phaseTheta)
-        self.temp["CXDistanceWgtA"] = self._distance_wgt_A(self.distance_x(self.deltaCX), self.alpha)
         self.temp["ocsiIdx"] = (self.positionX / self.dx).round().astype(int)
         self.temp["dotTheta"] = self.dotTheta
-        self.temp["dotC"] = self.pointC
-        
+        self.temp["dotU"] = self.dotU
+        self.temp["dotV"] = self.dotV
+    
     @property
     def nablaU(self):
         return np.array([
@@ -475,7 +475,6 @@ class GSPatternFormation(PatternFormation):
         )
 
     def update(self):
-        self.temp["CXDistanceWgtA"] = self._distance_wgt_A(self.distance_x(self.deltaCX), self.alpha)
         self.temp["ocsiIdx"] = (self.positionX / self.dx).round().astype(int)
         self.temp["dotTheta"] = self.dotTheta
         self.temp["dotU"] = self.dotU
