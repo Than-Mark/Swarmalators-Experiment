@@ -309,11 +309,17 @@ class GSPatternFormation(PatternFormation):
                  typeA: str = "distanceWgt", agentsNum: int=1000, dt: float=0.01, 
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 10, 
                  distribution: str = "uniform", randomSeed: int = 10, overWrite: bool = False) -> None:
+        self.halfAgentsNum = agentsNum // 2
         self.u = np.random.rand(cellNumInLine, cellNumInLine)
         self.v = np.random.rand(cellNumInLine, cellNumInLine)
+        self.chemoBetaUArray = chemoBetaU * np.concatenate([
+            np.ones(self.halfAgentsNum), np.zeros(self.halfAgentsNum)
+        ])
+        self.chemoBetaVArray = chemoBetaV * np.concatenate([
+            np.zeros(self.halfAgentsNum), np.ones(self.halfAgentsNum)
+        ])
         self.chemoBetaU = chemoBetaU
         self.chemoBetaV = chemoBetaV
-        self.halfAgentsNum = agentsNum // 2
 
         assert distribution in ["uniform"]
         assert typeA in ["distanceWgt"]
@@ -337,13 +343,13 @@ class GSPatternFormation(PatternFormation):
         self.alpha = alpha
         if distribution == "uniform":
             self.omegaTheta = np.concatenate([
-                np.random.uniform(1, 3, size=agentsNum // 2),
-                np.random.uniform(-3, -1, size=agentsNum // 2)
+                np.random.uniform(1, 3, size=self.halfAgentsNum),
+                np.random.uniform(-3, -1, size=self.halfAgentsNum)
             ])
         elif distribution == "normal":
             self.omegaTheta = np.concatenate([
-                np.random.normal(loc=3, scale=0.5, size=agentsNum // 2),
-                np.random.normal(loc=-3, scale=0.5, size=agentsNum // 2)
+                np.random.normal(loc=3, scale=0.5, size=self.halfAgentsNum),
+                np.random.normal(loc=-3, scale=0.5, size=self.halfAgentsNum)
             ])
 
         self.typeA = typeA
@@ -408,10 +414,10 @@ class GSPatternFormation(PatternFormation):
     def chemotactic(self):
         localGradU = self.nablaU[self.temp["ocsiIdx"][:, 0], self.temp["ocsiIdx"][:, 1]]
         localGradV = self.nablaV[self.temp["ocsiIdx"][:, 0], self.temp["ocsiIdx"][:, 1]]
-        return self.chemoBetaU * (
+        return self.chemoBetaUArray * (
             self.temp["direction"][:, 0] * localGradU[:, 1] - 
             self.temp["direction"][:, 1] * localGradU[:, 0]
-        ) + self.chemoBetaV * (
+        ) + self.chemoBetaVArray * (
             self.temp["direction"][:, 0] * localGradV[:, 1] -
             self.temp["direction"][:, 1] * localGradV[:, 0]
         )
@@ -466,20 +472,16 @@ class GSPatternFormation(PatternFormation):
     def dotU(self):
         return (
             self.productU 
-            - self.u * self.v ** 2 
             - self.u * self.decayRateKd 
             + self.diffusionU
-            + self.epsilon * (self.c0 - self.u) ** 3
         )
     
     @property
     def dotV(self):
         return (
-            self.productV 
-            + self.u * self.v ** 2 
+            self.productV  
             - self.v * self.decayRateKd 
             + self.diffusionV
-            + self.epsilon * (self.c0 - self.v) ** 3
         )
 
     def update(self):
@@ -510,15 +512,15 @@ class GSPatternFormation(PatternFormation):
 
     def __str__(self) -> str:
             
-            name =  (
-                f"GSPF_K{self.strengthLambda:.3f}_a{self.alpha:.2f}"
-                f"_bu{self.chemoBetaU:.1f}_bv{self.chemoBetaV:.1f}"
-                f"_pu{self.productRateUK0}_pv{self.productRateVK0}"
-                f"_Kd{self.decayRateKd}_Dc{self.diffusionRateDc}"
-                f"_r{self.randomSeed}"
-            )
-            
-            return name
+        name =  (
+            f"GSPF_K{self.strengthLambda:.3f}_a{self.alpha:.2f}"
+            f"_bu{self.chemoBetaU:.1f}_bv{self.chemoBetaV:.1f}"
+            f"_pu{self.productRateUK0}_pv{self.productRateVK0}"
+            f"_Kd{self.decayRateKd}_Dc{self.diffusionRateDc}"
+            f"_r{self.randomSeed}"
+        )
+        
+        return name
 
 
 class StateAnalysis:
