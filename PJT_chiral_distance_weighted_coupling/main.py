@@ -138,7 +138,10 @@ class DisWgtCouple(Swarmalators2D):
     @nb.njit
     def _pointTheta(phaseTheta: np.ndarray, omegaTheta: np.ndarray, strengthLambda: float, 
                     h: float, A: np.ndarray):
-        adjMatrixTheta = np.repeat(phaseTheta, phaseTheta.shape[0]).reshape(phaseTheta.shape[0], phaseTheta.shape[0])
+        adjMatrixTheta = (
+            np.repeat(phaseTheta, phaseTheta.shape[0])
+            .reshape(phaseTheta.shape[0], phaseTheta.shape[0])
+        )
         k1 = omegaTheta + strengthLambda * np.sum(A * np.sin(
             adjMatrixTheta - phaseTheta
         ), axis=0)

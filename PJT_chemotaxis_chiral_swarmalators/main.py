@@ -309,25 +309,15 @@ class GSPatternFormation(PatternFormation):
                  typeA: str = "distanceWgt", agentsNum: int=1000, dt: float=0.01, 
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 10, 
                  distribution: str = "uniform", randomSeed: int = 10, overWrite: bool = False) -> None:
-        self.halfAgentsNum = agentsNum // 2
-        self.u = np.random.rand(cellNumInLine, cellNumInLine)
-        self.v = np.random.rand(cellNumInLine, cellNumInLine)
-        self.chemoBetaUArray = chemoBetaU * np.concatenate([
-            np.ones(self.halfAgentsNum), np.zeros(self.halfAgentsNum)
-        ])
-        self.chemoBetaVArray = chemoBetaV * np.concatenate([
-            np.zeros(self.halfAgentsNum), np.ones(self.halfAgentsNum)
-        ])
-        self.chemoBetaU = chemoBetaU
-        self.chemoBetaV = chemoBetaV
 
         assert distribution in ["uniform"]
         assert typeA in ["distanceWgt"]
 
+        self.halfAgentsNum = agentsNum // 2
+
         np.random.seed(randomSeed)
         self.positionX = np.random.random((agentsNum, 2)) * boundaryLength
         self.phaseTheta = np.random.random(agentsNum) * 2 * np.pi - np.pi
-        self.c = np.random.rand(cellNumInLine, cellNumInLine)
         self.cellNumInLine = cellNumInLine
         self.cPosition = np.array(list(product(np.linspace(0, boundaryLength, cellNumInLine), repeat=2)))
         self.dx = boundaryLength / (cellNumInLine - 1)
@@ -363,6 +353,17 @@ class GSPatternFormation(PatternFormation):
         self.halfBoundaryLength = boundaryLength / 2
         self.randomSeed = randomSeed
         self.overWrite = overWrite
+
+        self.u = np.random.rand(cellNumInLine, cellNumInLine)
+        self.v = np.random.rand(cellNumInLine, cellNumInLine)
+        self.chemoBetaUArray = chemoBetaU * np.concatenate([
+            np.zeros(self.halfAgentsNum), np.ones(self.halfAgentsNum)
+        ])
+        self.chemoBetaVArray = chemoBetaV * np.concatenate([
+            np.ones(self.halfAgentsNum), np.zeros(self.halfAgentsNum)
+        ])
+        self.chemoBetaU = chemoBetaU
+        self.chemoBetaV = chemoBetaV
 
         self.temp = dict()
         # The order of variable definitions has a dependency relationship
@@ -489,6 +490,7 @@ class GSPatternFormation(PatternFormation):
         self.temp["dotTheta"] = self.dotTheta
         self.temp["dotU"] = self.dotU
         self.temp["dotV"] = self.dotV
+        self.temp["direction"] = self._direction(self.phaseTheta)
         self.positionX = np.mod(
             self.positionX + self.speedV * self.temp["direction"] * self.dt, 
             self.boundaryLength
