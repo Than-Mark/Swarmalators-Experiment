@@ -303,9 +303,10 @@ class PatternFormation(Swarmalators2D):
 class GSPatternFormation(PatternFormation):
     def __init__(self, strengthLambda: float, alpha: float, boundaryLength: float = 10, 
                  productRateUK0: float = 1, productRateVK0: float = 1,
-                 decayRateKd: float = 1, c0: float = 5, 
+                 decayRateKd: float = 1, 
                  chemoBetaU: float = 1, chemoBetaV: float = 1, 
-                 diffusionRateDc: float = 1, epsilon: float = 10, cellNumInLine: int = 50, 
+                 diffusionRateDu: float = 1, diffusionRateDv: float = 1, 
+                 cellNumInLine: int = 50, 
                  typeA: str = "distanceWgt", agentsNum: int=1000, dt: float=0.01, 
                  tqdm: bool = False, savePath: str = None, shotsnaps: int = 10, 
                  distribution: str = "uniform", randomSeed: int = 10, overWrite: bool = False) -> None:
@@ -325,9 +326,8 @@ class GSPatternFormation(PatternFormation):
         self.productRateUK0 = productRateUK0
         self.productRateVK0 = productRateVK0
         self.decayRateKd = decayRateKd
-        self.diffusionRateDc = diffusionRateDc
-        self.c0 = c0
-        self.epsilon = epsilon
+        self.diffusionRateDu = diffusionRateDu
+        self.diffusionRateDv = diffusionRateDv
         self.dt = dt
         self.speedV = 3
         self.alpha = alpha
@@ -463,11 +463,11 @@ class GSPatternFormation(PatternFormation):
     
     @property
     def diffusionU(self):
-        return self.diffusionRateDc * self.nabla2U
+        return self.diffusionRateDu * self.nabla2U
     
     @property
     def diffusionV(self):
-        return self.diffusionRateDc * self.nabla2V
+        return self.diffusionRateDv * self.nabla2V
     
     @property
     def dotU(self):
@@ -517,8 +517,9 @@ class GSPatternFormation(PatternFormation):
         name =  (
             f"GSPF_K{self.strengthLambda:.3f}_a{self.alpha:.2f}"
             f"_bu{self.chemoBetaU:.1f}_bv{self.chemoBetaV:.1f}"
-            f"_pu{self.productRateUK0}_pv{self.productRateVK0}"
-            f"_Kd{self.decayRateKd}_Dc{self.diffusionRateDc}"
+            f"_pu{self.productRateUK0:.2f}_pv{self.productRateVK0:.2f}"
+            f"_Kd{self.decayRateKd:.2f}"
+            f"_Du{self.diffusionRateDu:.2f}_Dv{self.diffusionRateDv:.2f}"
             f"_r{self.randomSeed}"
         )
         
